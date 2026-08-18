@@ -16,9 +16,11 @@ O token **nunca** entra no repositório, em nenhum arquivo, nem em variável de 
 
 Sem token configurado o app funciona por completo — só não sincroniza: os dados ficam no `localStorage` daquele navegador e o indicador no canto mostra `só neste aparelho`.
 
-## Primeiro uso: gerar o token
+## Opcional: sincronizar entre aparelhos
 
-O escopo abaixo é o mínimo necessário. Um token com mais permissão do que isso não traz nenhuma vantagem para o app e aumenta o estrago caso vaze.
+**Nada nesta seção é obrigatório.** Ela só interessa se você quiser abrir o mesmo board em mais de um aparelho — celular, outro computador. Para usar num computador só, pule direto para [Uso diário](#uso-diário): o app já está pronto, guardando os dados no navegador.
+
+Para ligar a sincronização, gere um token. O escopo abaixo é o mínimo necessário: um token com mais permissão do que isso não traz nenhuma vantagem para o app e aumenta o estrago caso vaze.
 
 1. Acesse **https://github.com/settings/personal-access-tokens/new** (Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token).
 2. **Token name:** `kanban` (ou o que preferir).
