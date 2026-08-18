@@ -5,6 +5,7 @@ import { migrate } from './storage'
 import { useHotkeys } from './hooks/useHotkeys'
 import { Toolbar, type View } from './components/Toolbar'
 import { Board } from './components/Board'
+import { TrackView } from './components/TrackView'
 import { CardPanel } from './components/CardPanel'
 import { ArchiveView } from './components/ArchiveView'
 import { SettingsView } from './components/SettingsView'
@@ -182,6 +183,14 @@ export function App() {
             dispatch={dispatch}
             onOpenCard={(card) => setPanel({ mode: 'edit', cardId: card.id })}
             onAddCard={(columnId) => openCreate(columnId)}
+          />
+        )}
+        {view === 'track' && (
+          <TrackView
+            board={board}
+            hiddenIds={hiddenIds}
+            selectedCardId={openPanel?.mode === 'edit' ? openPanel.cardId : null}
+            onOpenCard={(card) => setPanel({ mode: 'edit', cardId: card.id })}
           />
         )}
         {view === 'archive' && <ArchiveView board={board} dispatch={dispatch} />}

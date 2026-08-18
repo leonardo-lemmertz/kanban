@@ -3,7 +3,7 @@ import { PRIORITIES, PRIORITY_LABEL, type Priority } from '../types'
 import type { SyncStatus } from '../state/useBoard'
 import { SyncBadge } from './SyncBadge'
 
-export type View = 'board' | 'archive' | 'settings'
+export type View = 'board' | 'track' | 'archive' | 'settings'
 
 export interface ToolbarProps {
   view: View
@@ -38,6 +38,7 @@ export function Toolbar(props: ToolbarProps) {
         {(
           [
             ['board', 'Board'],
+            ['track', 'Pista'],
             ['archive', `Arquivo${props.archivedCount > 0 ? ` (${props.archivedCount})` : ''}`],
             ['settings', 'Config'],
           ] as const

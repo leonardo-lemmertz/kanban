@@ -87,6 +87,20 @@ Quando o token expirar, o app mostra um aviso vermelho com botão para a tela de
 - **WIP limit:** o contador da coluna fica vermelho quando passa do limite (menu ⋯ da coluna para definir).
 - **Arquivar em vez de excluir:** o card sai do board e continua consultável na aba **Arquivo**, de onde pode voltar para qualquer coluna.
 
+### Vista "Pista"
+
+Aba ao lado de **Board**: o mesmo board desenhado como uma volta de kart, com traçado inspirado em Interlagos (S do Senna, Curva do Sol, reta oposta, ferradura, junção, subida dos boxes).
+
+- Cada **coluna** do board é um **setor** da pista, na ordem em que estão no board — renomear ou reordenar colunas muda a pista sozinho.
+- Cada **card** é um kart, distribuído dentro do seu setor pela ordem que tem na coluna.
+- A **cor do kart** é a bandeira do prazo: vermelho atrasado, âmbar vence hoje, azul vence em breve, cinza sem prazo.
+- **Clique num kart** para abrir o card. Busca e filtros valem aqui também; os cards filtrados saem da pista e a legenda diz quantos ficaram ocultos.
+- Setor lotado encolhe os karts para não encavalar; acima de ~24 cards num setor o número de dentro deixa de ser desenhado.
+
+É uma vista de leitura, para olhar o todo — não dá para arrastar karts. Para mover um card a partir dela, abra pelo kart e use o seletor de coluna no painel. O traçado é uma aproximação estilizada do autódromo, não um decalque: as proporções foram ajustadas para caber na tela.
+
+O posicionamento sai de `getPointAtLength()` no próprio `<path>` do SVG, então mudar o desenho da pista não exige mexer em nada da distribuição dos cards.
+
 ### Indicador de sincronização
 
 | Estado | O que significa |
@@ -171,6 +185,7 @@ src/
     boardReducer.ts     ações puras; cada ação devolve sua mensagem de commit
     useBoard.ts         reducer + debounce de 2s + estado de sync + conflito
   components/           Board, ColumnView, CardTile, CardPanel, ArchiveView…
+    TrackView.tsx       vista "Pista": o board como volta de kart
   lib/markdown.tsx      renderizador próprio, sem innerHTML
 ```
 
