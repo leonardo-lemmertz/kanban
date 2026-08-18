@@ -11,28 +11,32 @@ import { dueState, formatDue } from '../lib/dates'
  * juncao e a subida de volta aos boxes) em proporcoes que caibam na tela.
  *
  * Cada coluna do board vira um setor da pista, na ordem em que estao no board.
- * Os cards viram karts distribuidos dentro do seu setor. A posicao de cada kart
- * sai de getPointAtLength() no proprio path -- ou seja, o desenho da pista pode
- * mudar sem mexer em nada da distribuicao.
+ * Os cards viram karts distribuidos dentro do seu setor. Posicao e angulo de
+ * cada kart saem de getPointAtLength() no proprio path -- ou seja, o desenho da
+ * pista pode mudar sem mexer em nada da distribuicao.
  */
 
 const TRACK =
-  'M100 380 L100 150 ' +
-  'C100 112 138 80 196 90 C248 99 254 150 300 170 ' +
-  'C360 195 420 148 520 140 L780 210 ' +
-  'C842 228 872 282 830 320 C790 358 700 332 690 280 ' +
-  'C680 228 618 240 600 290 C580 342 520 350 500 300 ' +
-  'C480 248 420 258 380 300 C330 352 200 420 140 420 ' +
-  'C112 420 100 406 100 380 Z'
+  'M840 380 L840 150 ' +
+  'C840 112 802 80 744 90 C692 99 686 150 640 170 ' +
+  'C580 195 520 148 420 140 L160 210 ' +
+  'C98 228 68 282 110 320 C150 358 240 332 250 280 ' +
+  'C260 228 322 240 340 290 C360 342 420 350 440 300 ' +
+  'C460 248 520 258 560 300 C610 352 740 420 800 420 ' +
+  'C828 420 840 406 840 380 Z '
+
+/** Largura da faixa de asfalto e da zebra que a contorna. */
+const ROAD = 24
+const KERB = 30
 
 /** Cor de cada setor, na ordem das colunas. Repete se houver mais colunas. */
 const SECTOR = [
-  { stroke: 'stroke-sky-500 dark:stroke-sky-400', chip: 'bg-sky-500 dark:bg-sky-400' },
-  { stroke: 'stroke-emerald-500 dark:stroke-emerald-400', chip: 'bg-emerald-500 dark:bg-emerald-400' },
-  { stroke: 'stroke-amber-500 dark:stroke-amber-400', chip: 'bg-amber-500 dark:bg-amber-400' },
-  { stroke: 'stroke-violet-500 dark:stroke-violet-400', chip: 'bg-violet-500 dark:bg-violet-400' },
-  { stroke: 'stroke-rose-500 dark:stroke-rose-400', chip: 'bg-rose-500 dark:bg-rose-400' },
-  { stroke: 'stroke-teal-500 dark:stroke-teal-400', chip: 'bg-teal-500 dark:bg-teal-400' },
+  { road: 'stroke-sky-200 dark:stroke-sky-950', chip: 'bg-sky-200 dark:bg-sky-950' },
+  { road: 'stroke-emerald-200 dark:stroke-emerald-950', chip: 'bg-emerald-200 dark:bg-emerald-950' },
+  { road: 'stroke-amber-200 dark:stroke-amber-950', chip: 'bg-amber-200 dark:bg-amber-950' },
+  { road: 'stroke-violet-200 dark:stroke-violet-950', chip: 'bg-violet-200 dark:bg-violet-950' },
+  { road: 'stroke-rose-200 dark:stroke-rose-950', chip: 'bg-rose-200 dark:bg-rose-950' },
+  { road: 'stroke-teal-200 dark:stroke-teal-950', chip: 'bg-teal-200 dark:bg-teal-950' },
 ]
 
 /** Bandeira do kart: vem do prazo, igual aos selos do board. */
@@ -46,15 +50,27 @@ const FLAG: Record<string, { fill: string; label: string }> = {
 
 /** Marcos do circuito, posicionados para o tracado acima. */
 const LANDMARKS = [
-  { x: 214, y: 64, text: 'S do Senna' },
-  { x: 452, y: 116, text: 'Curva do Sol' },
-  { x: 646, y: 130, text: 'Reta oposta' },
-  { x: 888, y: 342, text: 'Descida do lago' },
-  { x: 757, y: 370, text: 'Ferradura' },
+  { x: 726, y: 64, text: 'S do Senna' },
+  { x: 488, y: 116, text: 'Curva do Sol' },
+  { x: 294, y: 130, text: 'Reta oposta' },
+  { x: 52, y: 342, text: 'Descida do lago' },
+  { x: 183, y: 370, text: 'Ferradura' },
   { x: 470, y: 372, text: 'Bico de pato' },
-  { x: 232, y: 452, text: 'Junção' },
-  // dentro do loop: na borda esquerda o rotulo caia sobre o asfalto e sobre os karts
-  { x: 180, y: 265, text: 'Subida dos boxes' },
+  { x: 708, y: 452, text: 'Junção' },
+  // dentro do loop: junto a reta dos boxes o rotulo caia sobre o asfalto e sobre os karts
+  { x: 760, y: 265, text: 'Subida dos boxes' },
+]
+
+/** Tufos de grama, so decoracao. Posicoes conferidas contra asfalto e rotulos. */
+const GRASS: [number, number][] = [
+  [690, 210],
+  [726, 302],
+  [668, 264],
+  [624, 228],
+  [380, 198],
+  [332, 203],
+  [284, 303],
+  [404, 248],
 ]
 
 export interface TrackViewProps {
@@ -68,16 +84,37 @@ interface Kart {
   card: Card
   x: number
   y: number
+  angle: number
   number: number
 }
 
 /**
- * Raio do kart conforme a lotacao do setor: com poucos cards fica no tamanho
- * cheio, com muitos encolhe para nao encavalar. Abaixo de 8 o numero dentro do
- * kart deixa de ser legivel, entao ele nao e desenhado.
+ * Raio de referencia do kart conforme a lotacao do setor: com poucos cards fica
+ * no tamanho cheio, com muitos encolhe para nao encavalar. Abaixo de 8 o desenho
+ * do kart nao se le mais e viramos bolinha.
  */
 function kartRadius(spacing: number): number {
   return Math.max(5, Math.min(10, spacing / 2.4))
+}
+
+/**
+ * Ponto e angulo de um kart a uma dada distancia da largada.
+ *
+ * A geometria do TRACK esta espelhada em x justamente para que percorrer o path
+ * na ordem em que foi desenhado (largada -> S do Senna -> Curva do Sol -> reta
+ * oposta -> ... -> juncao) resulte no sentido anti-horario, que e o de
+ * Interlagos. Inverter o percurso, em vez de espelhar, embaralharia a ordem das
+ * curvas.
+ */
+function raceAt(path: SVGPathElement, length: number, distance: number) {
+  const at = distance % length
+  const point = path.getPointAtLength(at)
+  const ahead = path.getPointAtLength((at + 8) % length)
+  return {
+    x: point.x,
+    y: point.y,
+    angle: (Math.atan2(ahead.y - point.y, ahead.x - point.x) * 180) / Math.PI,
+  }
 }
 
 export function TrackView(props: TrackViewProps) {
@@ -99,14 +136,13 @@ export function TrackView(props: TrackViewProps) {
         .sort((a, b) => a.order - b.order)
       const visible = cards.filter((card) => !props.hiddenIds.has(card.id))
       const start = share * index
-
       const spacing = share / (visible.length + 1)
+
       const karts: Kart[] =
         path && length > 0
           ? visible.map((card, position) => {
-              const at = start + (position + 1) * spacing
-              const point = path.getPointAtLength(at)
-              return { card, x: point.x, y: point.y, number: position + 1 }
+              const spot = raceAt(path, length, start + (position + 1) * spacing)
+              return { card, ...spot, number: position + 1 }
             })
           : []
 
@@ -122,18 +158,11 @@ export function TrackView(props: TrackViewProps) {
     })
   }, [length, props.board, props.hiddenIds])
 
-  /** Linha de largada/chegada, desenhada na perpendicular do tracado. */
-  const startLine = useMemo(() => {
+  /** Ponto e inclinacao da largada, para o quadriculado cruzar a pista. */
+  const grid = useMemo(() => {
     const path = pathRef.current
     if (!path || length === 0) return null
-    const a = path.getPointAtLength(0)
-    const b = path.getPointAtLength(8)
-    const dx = b.x - a.x
-    const dy = b.y - a.y
-    const size = Math.hypot(dx, dy) || 1
-    const nx = (-dy / size) * 13
-    const ny = (dx / size) * 13
-    return { x1: a.x - nx, y1: a.y - ny, x2: a.x + nx, y2: a.y + ny }
+    return raceAt(path, length, 0)
   }, [length])
 
   return (
@@ -144,42 +173,79 @@ export function TrackView(props: TrackViewProps) {
         role="img"
         aria-label="O board desenhado como uma volta de kart, com um setor por coluna"
       >
-        {/* asfalto */}
+        {/* zebra: contorno da faixa de asfalto */}
+        <path
+          d={TRACK}
+          fill="none"
+          strokeWidth={KERB}
+          strokeLinejoin="round"
+          className="stroke-zinc-400/60 dark:stroke-zinc-600/60"
+        />
+
+        {/* asfalto -- este e o path de referencia para todas as medidas */}
         <path
           ref={pathRef}
           d={TRACK}
           fill="none"
-          strokeWidth={22}
+          strokeWidth={ROAD}
           strokeLinejoin="round"
-          className="stroke-zinc-300/70 dark:stroke-zinc-700/60"
+          className="stroke-zinc-100 dark:stroke-zinc-800"
         />
 
-        {/* setores coloridos sobre o asfalto: um trecho do mesmo path por coluna */}
+        {/* um trecho colorido do mesmo path por coluna */}
         {length > 0 &&
           layout.map(({ column, start, share }, index) => (
             <path
               key={column.id}
               d={TRACK}
               fill="none"
-              strokeWidth={9}
+              strokeWidth={ROAD}
               strokeDasharray={`${share} ${length}`}
               strokeDashoffset={-start}
-              className={SECTOR[index % SECTOR.length].stroke}
-              opacity={0.9}
+              className={SECTOR[index % SECTOR.length].road}
             />
           ))}
 
-        {startLine && (
-          <line
-            x1={startLine.x1}
-            y1={startLine.y1}
-            x2={startLine.x2}
-            y2={startLine.y2}
-            strokeWidth={4}
-            strokeDasharray="3 3"
-            className="stroke-zinc-800 dark:stroke-zinc-200"
-          />
+        {/* tracejado do meio da pista */}
+        <path
+          d={TRACK}
+          fill="none"
+          strokeWidth={2}
+          strokeDasharray="12 14"
+          strokeLinecap="round"
+          className="stroke-zinc-400 dark:stroke-zinc-500"
+          opacity={0.75}
+        />
+
+        {grid && (
+          <g transform={`translate(${grid.x} ${grid.y}) rotate(${grid.angle})`}>
+            {[0, 1, 2, 3, 4, 5].map((row) =>
+              [0, 1].map((col) => (
+                <rect
+                  key={`${row}-${col}`}
+                  x={col * 5}
+                  y={-ROAD / 2 + row * 4}
+                  width={5}
+                  height={4}
+                  className={
+                    (row + col) % 2 === 0 ? 'fill-zinc-800 dark:fill-zinc-200' : 'fill-white dark:fill-zinc-700'
+                  }
+                />
+              )),
+            )}
+          </g>
         )}
+
+        {GRASS.map(([x, y]) => (
+          <path
+            key={`${x}-${y}`}
+            d={`M${x} ${y} l4 -7 l4 7`}
+            fill="none"
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            className="stroke-emerald-500/50 dark:stroke-emerald-600/60"
+          />
+        ))}
 
         {LANDMARKS.map((mark) => (
           <text
@@ -193,9 +259,8 @@ export function TrackView(props: TrackViewProps) {
           </text>
         ))}
 
-        {/* karts */}
         {layout.map(({ karts, radius }) =>
-          karts.map(({ card, x, y, number }) => {
+          karts.map(({ card, x, y, angle, number }) => {
             const flag = FLAG[dueState(card.dueDate)]
             const selected = props.selectedCardId === card.id
             return (
@@ -213,26 +278,48 @@ export function TrackView(props: TrackViewProps) {
                 }}
               >
                 <title>
-                  {`${card.title} — ${PRIORITY_LABEL[card.priority]}${
+                  {`${number}. ${card.title} — ${PRIORITY_LABEL[card.priority]}${
                     card.dueDate ? `, entrega ${formatDue(card.dueDate)}` : ''
                   }`}
                 </title>
-                <circle
-                  cx={x}
-                  cy={y}
-                  r={selected ? radius + 2 : radius}
-                  className={`${flag.fill} stroke-white dark:stroke-zinc-900`}
-                  strokeWidth={2}
-                />
-                {radius >= 8 && (
-                  <text
-                    x={x}
-                    y={y + 3.5}
-                    textAnchor="middle"
-                    className="pointer-events-none fill-white text-[10px] font-semibold"
-                  >
-                    {number}
-                  </text>
+
+                {selected && (
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r={radius + 5}
+                    fill="none"
+                    strokeWidth={2}
+                    className="stroke-sky-600 dark:stroke-sky-400"
+                  />
+                )}
+
+                {radius >= 8 ? (
+                  // kart visto de cima, apontado na direcao da volta
+                  <g transform={`translate(${x} ${y}) rotate(${angle}) scale(${radius / 10})`}>
+                    <rect x={-8} y={-6.6} width={5} height={2.6} rx={1} className="fill-zinc-700 dark:fill-zinc-950" />
+                    <rect x={-8} y={4} width={5} height={2.6} rx={1} className="fill-zinc-700 dark:fill-zinc-950" />
+                    <rect x={4} y={-6.6} width={4.5} height={2.6} rx={1} className="fill-zinc-700 dark:fill-zinc-950" />
+                    <rect x={4} y={4} width={4.5} height={2.6} rx={1} className="fill-zinc-700 dark:fill-zinc-950" />
+                    <rect
+                      x={-9}
+                      y={-4.4}
+                      width={18}
+                      height={8.8}
+                      rx={3}
+                      className={`${flag.fill} stroke-white dark:stroke-zinc-900`}
+                      strokeWidth={1.2}
+                    />
+                    <circle cx={1} cy={0} r={2.6} className="fill-white dark:fill-zinc-200" />
+                  </g>
+                ) : (
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r={radius}
+                    className={`${flag.fill} stroke-white dark:stroke-zinc-900`}
+                    strokeWidth={1.5}
+                  />
                 )}
               </g>
             )
@@ -246,7 +333,10 @@ export function TrackView(props: TrackViewProps) {
             const overWip = column.wipLimit !== undefined && total > column.wipLimit
             return (
               <span key={column.id} className="inline-flex items-center gap-1.5 text-[12px]">
-                <span className={`h-2 w-4 rounded-sm ${SECTOR[index % SECTOR.length].chip}`} aria-hidden="true" />
+                <span
+                  className={`h-2.5 w-5 rounded-sm border border-zinc-300 dark:border-zinc-700 ${SECTOR[index % SECTOR.length].chip}`}
+                  aria-hidden="true"
+                />
                 <span className="font-medium">{column.title}</span>
                 <span
                   className={
@@ -258,9 +348,7 @@ export function TrackView(props: TrackViewProps) {
                   {total}
                   {column.wipLimit !== undefined && `/${column.wipLimit}`}
                 </span>
-                {hidden > 0 && (
-                  <span className="text-[11px] text-zinc-400 dark:text-zinc-500">({hidden} oculto)</span>
-                )}
+                {hidden > 0 && <span className="text-[11px] text-zinc-400 dark:text-zinc-500">({hidden} oculto)</span>}
               </span>
             )
           })}

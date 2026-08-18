@@ -95,7 +95,8 @@ Aba ao lado de **Board**: o mesmo board desenhado como uma volta de kart, com tr
 - Cada **card** é um kart, distribuído dentro do seu setor pela ordem que tem na coluna.
 - A **cor do kart** é a bandeira do prazo: vermelho atrasado, âmbar vence hoje, azul vence em breve, cinza sem prazo.
 - **Clique num kart** para abrir o card. Busca e filtros valem aqui também; os cards filtrados saem da pista e a legenda diz quantos ficaram ocultos.
-- Setor lotado encolhe os karts para não encavalar; acima de ~24 cards num setor o número de dentro deixa de ser desenhado.
+- Setor lotado encolhe os karts para não encavalar; acima de ~24 cards num setor o kart vira uma bolinha simples.
+- A volta corre no **sentido anti-horário**, como Interlagos. A geometria do traçado está espelhada justamente para isso: percorrer o `path` na ordem em que foi desenhado (largada → S do Senna → Curva do Sol → reta oposta → … → junção) resulta no sentido anti-horário. Inverter o percurso, em vez de espelhar, embaralharia a ordem das curvas.
 
 É uma vista de leitura, para olhar o todo — não dá para arrastar karts. Para mover um card a partir dela, abra pelo kart e use o seletor de coluna no painel. O traçado é uma aproximação estilizada do autódromo, não um decalque: as proporções foram ajustadas para caber na tela.
 
