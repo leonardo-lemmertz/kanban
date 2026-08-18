@@ -34,6 +34,46 @@ export function ErrorBanner(props: {
   )
 }
 
+/** Modo pasta: o navegador quer a autorizacao de escrita de novo nesta sessao. */
+export function PermissionBanner(props: { onGrant: () => void; onOpenSettings: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-wrap items-center gap-2 border-b border-amber-400 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 dark:border-amber-700 dark:bg-amber-950/70 dark:text-amber-100"
+    >
+      <span className="min-w-[16rem] flex-1">
+        <span className="font-semibold">Autorize a gravação no arquivo.</span> Por segurança, o navegador pede sua
+        confirmação para voltar a escrever no arquivo do board. Até você autorizar, as alterações ficam salvas apenas
+        neste navegador.
+      </span>
+      <button type="button" className="btn btn-primary" onClick={props.onGrant}>
+        Autorizar
+      </button>
+      <button type="button" className="btn border-amber-400 dark:border-amber-700" onClick={props.onOpenSettings}>
+        Configurações
+      </button>
+    </div>
+  )
+}
+
+/** Modo pasta escolhido, mas nenhum arquivo selecionado (ou o arquivo se perdeu). */
+export function FileMissingBanner(props: { onOpenSettings: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-wrap items-center gap-2 border-b border-amber-400 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 dark:border-amber-700 dark:bg-amber-950/70 dark:text-amber-100"
+    >
+      <span className="min-w-[16rem] flex-1">
+        O modo <span className="font-semibold">arquivo no computador</span> está escolhido, mas nenhum arquivo foi
+        selecionado neste navegador. Enquanto isso, o board fica salvo apenas aqui.
+      </span>
+      <button type="button" className="btn btn-primary" onClick={props.onOpenSettings}>
+        Escolher o arquivo
+      </button>
+    </div>
+  )
+}
+
 export function ConflictBanner(props: {
   local: Board
   remote: Board

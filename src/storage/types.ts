@@ -1,6 +1,6 @@
 import type { Board } from '../types'
 
-export type AdapterKind = 'local' | 'github'
+export type AdapterKind = 'local' | 'file' | 'github'
 
 export interface StorageAdapter {
   kind: AdapterKind
@@ -30,5 +30,13 @@ export class OfflineError extends Error {
   constructor() {
     super('Sem conexão com o GitHub.')
     this.name = 'OfflineError'
+  }
+}
+
+/** O navegador revogou a autorizacao de escrita no arquivo escolhido. */
+export class PermissionError extends Error {
+  constructor() {
+    super('O navegador precisa da sua autorização para gravar no arquivo.')
+    this.name = 'PermissionError'
   }
 }

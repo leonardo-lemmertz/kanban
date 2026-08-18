@@ -4,23 +4,33 @@ import {
   AuthError,
   ConflictError,
   OfflineError,
+  PermissionError,
   cacheBoard,
-  createAdapter,
-  isSyncConfigured,
   readCachedBoard,
   readConfig,
+  requestFilePermission,
+  resolveAdapter,
   writeConfig,
-  type GithubConfig,
   type StorageAdapter,
+  type SyncConfig,
 } from '../storage'
 import { createDebounced } from '../lib/debounce'
 import { applyAction, type Action } from './boardReducer'
 import { createSeedBoard } from './seed'
 
-/** Janela de agrupamento: um commit por rajada de alteracoes, nao por drag. */
+/** Janela de agrupamento: uma gravacao por rajada de alteracoes, nao por drag. */
 const SAVE_DEBOUNCE_MS = 2000
 
-export type SyncStatus = 'loading' | 'local' | 'saved' | 'saving' | 'offline' | 'error' | 'conflict'
+export type SyncStatus =
+  | 'loading'
+  | 'local'
+  | 'saved'
+  | 'saving'
+  | 'offline'
+  | 'error'
+  | 'conflict'
+  /** modo pasta: o navegador quer autorizacao para gravar no arquivo */
+  | 'permission'
 
 export interface BoardApi {
   board: Board | null
@@ -29,15 +39,18 @@ export interface BoardApi {
   error: string | null
   /** true quando o erro aponta para problema de token/permissao */
   needsSettings: boolean
+  /** modo pasta escolhido, mas nenhum arquivo selecionado ainda */
+  fileMissing: boolean
   /** versao remota que causou o conflito, aguardando decisao */
   conflictRemote: Board | null
-  config: GithubConfig
-  syncEnabled: boolean
+  config: SyncConfig
   dispatch: (action: Action) => void
   reload: () => Promise<void>
   saveNow: () => void
   resolveConflict: (choice: 'remote' | 'local') => void
-  saveConfig: (config: GithubConfig) => Promise<void>
+  saveConfig: (config: SyncConfig) => Promise<void>
+  /** precisa ser chamada de dentro de um clique do usuario */
+  grantFilePermission: () => Promise<void>
 }
 
 function composeMessage(messages: string[]): string {
@@ -47,16 +60,16 @@ function composeMessage(messages: string[]): string {
 }
 
 export function useBoard(): BoardApi {
-  const [config, setConfig] = useState<GithubConfig>(() => readConfig())
+  const [config, setConfig] = useState<SyncConfig>(() => readConfig())
   const [board, setBoard] = useState<Board | null>(null)
   const [status, setStatus] = useState<SyncStatus>('loading')
   const [error, setError] = useState<string | null>(null)
   const [needsSettings, setNeedsSettings] = useState(false)
+  const [fileMissing, setFileMissing] = useState(false)
   const [conflictRemote, setConflictRemote] = useState<Board | null>(null)
 
-  const syncEnabled = useMemo(() => isSyncConfigured(config), [config])
-
   const adapterRef = useRef<StorageAdapter | null>(null)
+  const handleRef = useRef<FileSystemFileHandle | null>(null)
   const boardRef = useRef<Board | null>(null)
   const messagesRef = useRef<string[]>([])
   const inFlightRef = useRef(false)
@@ -70,6 +83,12 @@ export function useBoard(): BoardApi {
 
   const reportError = useCallback((cause: unknown) => {
     if (cause instanceof ConflictError) return
+    if (cause instanceof PermissionError) {
+      setStatus('permission')
+      setError(null)
+      setNeedsSettings(false)
+      return
+    }
     if (cause instanceof OfflineError) {
       setStatus('offline')
       setError('Sem conexão com o GitHub. As alterações ficam salvas neste aparelho e sobem quando a rede voltar.')
@@ -81,7 +100,7 @@ export function useBoard(): BoardApi {
     setNeedsSettings(cause instanceof AuthError)
   }, [])
 
-  /** Grava de fato: um PUT com a mensagem agrupada da rajada. */
+  /** Grava de fato, com a mensagem agrupada da rajada. */
   const flush = useCallback(async () => {
     const adapter = adapterRef.current
     const current = boardRef.current
@@ -123,15 +142,15 @@ export function useBoard(): BoardApi {
   const debounced = useMemo(() => createDebounced(() => void flush(), SAVE_DEBOUNCE_MS), [flush])
 
   useEffect(() => {
-    if (retryRef.current && status !== 'conflict') {
+    if (retryRef.current && status !== 'conflict' && status !== 'permission') {
       retryRef.current = false
       debounced.schedule()
     }
   }, [status, debounced])
 
-  /** (Re)monta o adaptador e carrega o board. */
+  /** (Re)monta o adaptador conforme o modo e carrega o board. */
   const bootstrap = useCallback(
-    async (nextConfig: GithubConfig) => {
+    async (nextConfig: SyncConfig) => {
       debounced.cancel()
       messagesRef.current = []
       setConflictRemote(null)
@@ -139,30 +158,38 @@ export function useBoard(): BoardApi {
       setNeedsSettings(false)
       setStatus('loading')
 
-      const adapter = createAdapter(nextConfig)
-      adapterRef.current = adapter
+      const resolved = await resolveAdapter(nextConfig)
+      adapterRef.current = resolved.adapter
+      handleRef.current = resolved.handle
+      setFileMissing(resolved.needsFile)
 
+      // Arquivo conhecido mas sem autorizacao: mostra a copia local e espera o clique.
+      if (resolved.needsPermission) {
+        commit(readCachedBoard() ?? createSeedBoard())
+        setStatus('permission')
+        return
+      }
+
+      const adapter = resolved.adapter
       try {
         const loaded = await adapter.load()
         if (loaded) {
           commit(loaded)
-          setStatus(adapter.kind === 'github' ? 'saved' : 'local')
+          setStatus(adapter.kind === 'local' ? 'local' : 'saved')
           return
         }
-        // Nada gravado ainda: usa o cache local, senao cria o board de exemplo.
+        // Nada gravado ainda: leva o board atual (ou o de exemplo) para o destino novo.
         const fallback = readCachedBoard() ?? createSeedBoard()
         commit(fallback)
-        if (adapter.kind === 'github') {
-          messagesRef.current = ['feat: cria board inicial']
-          await flush()
-        } else {
+        if (adapter.kind === 'local') {
           await adapter.save(fallback, 'init')
           setStatus('local')
+        } else {
+          messagesRef.current = ['feat: cria board inicial']
+          await flush()
         }
       } catch (cause) {
-        const fallback = readCachedBoard()
-        if (fallback) commit(fallback)
-        else commit(createSeedBoard())
+        commit(readCachedBoard() ?? createSeedBoard())
         reportError(cause)
       }
     },
@@ -190,7 +217,7 @@ export function useBoard(): BoardApi {
         return
       }
       messagesRef.current.push(result.message)
-      if (status !== 'conflict') {
+      if (status !== 'conflict' && status !== 'permission') {
         setStatus('saving')
         debounced.schedule()
       }
@@ -200,7 +227,7 @@ export function useBoard(): BoardApi {
 
   const reload = useCallback(async () => {
     const adapter = adapterRef.current
-    if (!adapter || adapter.kind !== 'github') return
+    if (!adapter || adapter.kind === 'local') return
     if (messagesRef.current.length > 0 || inFlightRef.current) return
     try {
       const remote = await adapter.load()
@@ -243,7 +270,7 @@ export function useBoard(): BoardApi {
   )
 
   const saveConfig = useCallback(
-    async (next: GithubConfig) => {
+    async (next: SyncConfig) => {
       writeConfig(next)
       setConfig(next)
       await bootstrap(next)
@@ -251,7 +278,23 @@ export function useBoard(): BoardApi {
     [bootstrap],
   )
 
-  // Recarrega ao voltar para a aba: cobre o caso de ter editado no celular.
+  const grantFilePermission = useCallback(async () => {
+    const handle = handleRef.current
+    if (!handle) return
+    try {
+      const state = await requestFilePermission(handle)
+      if (state === 'granted') {
+        await bootstrap(readConfig())
+        return
+      }
+      setStatus('permission')
+      setError('Sem essa autorização o board continua salvo apenas neste navegador.')
+    } catch (cause) {
+      reportError(cause)
+    }
+  }, [bootstrap, reportError])
+
+  // Recarrega ao voltar para a aba: cobre edicao em outro aparelho ou no arquivo.
   useEffect(() => {
     const onFocus = () => {
       if (document.visibilityState === 'visible') void reload()
@@ -264,7 +307,7 @@ export function useBoard(): BoardApi {
     }
   }, [reload])
 
-  // Avisa se sair da pagina com alteracao ainda nao enviada.
+  // Avisa se sair da pagina com alteracao ainda nao gravada.
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (messagesRef.current.length === 0) return
@@ -290,13 +333,14 @@ export function useBoard(): BoardApi {
     status,
     error,
     needsSettings,
+    fileMissing,
     conflictRemote,
     config,
-    syncEnabled,
     dispatch,
     reload,
     saveNow,
     resolveConflict,
     saveConfig,
+    grantFilePermission,
   }
 }

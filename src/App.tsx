@@ -8,7 +8,7 @@ import { Board } from './components/Board'
 import { CardPanel } from './components/CardPanel'
 import { ArchiveView } from './components/ArchiveView'
 import { SettingsView } from './components/SettingsView'
-import { ConflictBanner, ErrorBanner } from './components/Banners'
+import { ConflictBanner, ErrorBanner, FileMissingBanner, PermissionBanner } from './components/Banners'
 
 type PanelState = { mode: 'create'; columnId: string } | { mode: 'edit'; cardId: string } | null
 
@@ -141,6 +141,14 @@ export function App() {
         total={board.cards.length}
         archivedCount={board.archived.length}
       />
+
+      {api.status === 'permission' && (
+        <PermissionBanner onGrant={() => void api.grantFilePermission()} onOpenSettings={() => setView('settings')} />
+      )}
+
+      {api.fileMissing && api.status !== 'permission' && (
+        <FileMissingBanner onOpenSettings={() => setView('settings')} />
+      )}
 
       {api.conflictRemote && (
         <ConflictBanner

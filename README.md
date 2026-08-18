@@ -1,6 +1,6 @@
 # Kanban pessoal
 
-Kanban de uso diário para organizar demandas de trabalho. Site estático, sem backend: o app roda no navegador e guarda os dados num arquivo `board.json` dentro de um repositório privado seu, gravado pela API do GitHub.
+Kanban de uso diário para organizar demandas de trabalho. Site estático, sem backend: o app roda no navegador e grava os dados onde você escolher — no próprio navegador, num arquivo do seu computador, ou num `board.json` dentro de um repositório privado seu, pela API do GitHub.
 
 **Board:** https://leonardo-lemmertz.github.io/kanban/
 
@@ -16,9 +16,37 @@ O token **nunca** entra no repositório, em nenhum arquivo, nem em variável de 
 
 Sem token configurado o app funciona por completo — só não sincroniza: os dados ficam no `localStorage` daquele navegador e o indicador no canto mostra `só neste aparelho`.
 
+## Onde os dados ficam: três modos
+
+Escolhidos em **Config → Onde salvar o board**. Um modo por vez, trocável a qualquer momento.
+
+| Modo | Onde grava | Precisa | Serve para |
+| --- | --- | --- | --- |
+| **Só neste navegador** (padrão) | `localStorage` | nada | uso num computador só |
+| **Arquivo no computador** | um `.json` que você escolhe | Chrome ou Edge | ter os dados num arquivo de verdade — numa pasta de rede, sobrevivem à troca de máquina |
+| **GitHub** | `board.json` no repo privado | um token | sincronizar entre aparelhos, inclusive celular e fora da rede da empresa |
+
+### Modo arquivo
+
+Em **Config**, escolha **Arquivo no computador** e depois:
+
+- **Escolher onde salvar…** — cria (ou substitui) o arquivo, gravando nele o board que está na tela agora. É o caminho normal na primeira vez.
+- **Abrir um arquivo existente…** — o contrário: lê o board de um arquivo já gravado e passa a usá-lo, substituindo o que estava na tela. É como você retoma o board em outra máquina.
+
+A partir daí, cada alteração grava no arquivo — mesmo agrupamento de 2 s dos outros modos, para não escrever a cada tecla.
+
+Detalhes que vêm da API do navegador, não da nossa implementação:
+
+- Funciona no Chrome e no Edge. Firefox e Safari não expõem `showSaveFilePicker`; nesses o modo aparece desabilitado.
+- O navegador não revela ao site a pasta completa do arquivo — só o nome. É por isso que a tela mostra apenas `board.json`.
+- Ao reabrir o site, o navegador pode pedir a autorização de escrita de novo. Aparece uma faixa âmbar no topo com o botão **Autorizar**; até você clicar, as alterações ficam salvas no navegador e sobem para o arquivo depois.
+- Se o arquivo for movido, renomeado ou apagado, o app avisa e pede que você escolha outro em Config — não quebra em tela branca.
+
+Apontar o arquivo para uma pasta de rede (por exemplo `J:\Projetos\kanban-data\board.json`, que é um share do servidor) tira os dados do disco da sua máquina: o backup passa a ser o do próprio servidor, e outra máquina com o mesmo drive mapeado abre o mesmo board.
+
 ## Opcional: sincronizar entre aparelhos
 
-**Nada nesta seção é obrigatório.** Ela só interessa se você quiser abrir o mesmo board em mais de um aparelho — celular, outro computador. Para usar num computador só, pule direto para [Uso diário](#uso-diário): o app já está pronto, guardando os dados no navegador.
+**Nada nesta seção é obrigatório.** Ela só interessa se você quiser abrir o mesmo board em mais de um aparelho, incluindo celular e computador fora da rede da empresa. Se o que você quer é só não perder os dados ao trocar de máquina, o [modo arquivo](#modo-arquivo) resolve sem token. Para usar num computador só, pule direto para [Uso diário](#uso-diário).
 
 Para ligar a sincronização, gere um token. O escopo abaixo é o mínimo necessário: um token com mais permissão do que isso não traz nenhuma vantagem para o app e aumenta o estrago caso vaze.
 
@@ -63,14 +91,15 @@ Quando o token expirar, o app mostra um aviso vermelho com botão para a tela de
 
 | Estado | O que significa |
 | --- | --- |
-| `salvo` | tudo enviado ao GitHub |
-| `salvando` | alterações agrupadas; sobem em até 2s como um commit só |
+| `salvo` | tudo gravado no destino escolhido (arquivo ou GitHub) |
+| `salvando` | alterações agrupadas; gravam em até 2 s de uma vez |
+| `autorizar` | modo arquivo: o navegador quer sua confirmação para escrever — faixa âmbar no topo |
 | `offline` | sem rede — as alterações estão salvas no aparelho e sobem quando a conexão voltar |
 | `erro` | falha na gravação; o aviso no topo explica e aponta o caminho |
 | `conflito` | o board foi editado em outro aparelho — veja abaixo |
-| `só neste aparelho` | sem token: funciona, mas não sincroniza |
+| `só neste aparelho` | modo padrão: funciona, mas não grava fora do navegador |
 
-Clicar no indicador força o envio imediato e busca a versão remota.
+Clicar no indicador força a gravação imediata e busca a versão do destino.
 
 ### Conflito entre aparelhos
 
@@ -80,7 +109,7 @@ As gravações vão com o `sha` do arquivo lido. Se você editou no celular e de
 
 ### Export/import manual
 
-**Exportar** baixa o `board-<data>.json`. **Importar** substitui o board por um arquivo — e baixa automaticamente uma cópia do estado anterior antes de trocar. Funciona com ou sem token; é o plano B se algo der errado com a sincronização.
+**Exportar** baixa o `board-<data>.json`. **Importar** substitui o board por um arquivo — e baixa automaticamente uma cópia do estado anterior antes de trocar. Funciona nos três modos; é o plano B se algo der errado.
 
 ### Restaurar a partir do histórico de commits
 
@@ -132,8 +161,10 @@ O push na `main` dispara `.github/workflows/deploy.yml`, que faz o build e publi
 ```
 src/
   types.ts              Board, Column, Card, Priority, SCHEMA_VERSION
-  storage/              persistência: interface + 2 adaptadores
+  storage/              persistência: uma interface, três adaptadores
     localAdapter.ts       localStorage (padrão)
+    fileAdapter.ts        File System Access API, arquivo local
+    handleStore.ts        guarda o handle do arquivo no IndexedDB
     githubAdapter.ts      API do GitHub, controle de sha, 409, 401/403
     migrate.ts            valida/normaliza qualquer JSON de entrada
   state/

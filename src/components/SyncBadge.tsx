@@ -37,6 +37,12 @@ const STYLE: Record<SyncStatus, { label: string; dot: string; box: string; title
     box: 'border-red-400 text-red-700 dark:border-red-800 dark:text-red-400',
     title: 'Falha ao salvar. Veja o aviso no topo da tela.',
   },
+  permission: {
+    label: 'autorizar',
+    dot: 'bg-amber-500 animate-pulse',
+    box: 'border-amber-400 text-amber-700 dark:border-amber-700 dark:text-amber-400',
+    title: 'O navegador precisa da sua autorizacao para gravar no arquivo. Clique na faixa no topo da tela.',
+  },
   conflict: {
     label: 'conflito',
     dot: 'bg-red-500 animate-pulse',
