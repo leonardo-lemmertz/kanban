@@ -89,12 +89,18 @@ interface Kart {
 }
 
 /**
- * Raio de referencia do kart conforme a lotacao do setor: com poucos cards fica
- * no tamanho cheio, com muitos encolhe para nao encavalar. Abaixo de 8 o desenho
- * do kart nao se le mais e viramos bolinha.
+ * Tamanho do kart conforme a lotacao do setor: com poucos cards fica no tamanho
+ * cheio, com muitos encolhe para nao encavalar. Abaixo de 8 o desenho do kart
+ * nao se le mais e viramos bolinha.
+ *
+ * MAX_KART = 15 deixa o kart com ~27 de comprimento e ~20 de largura, ou seja
+ * quase preenchendo a faixa de asfalto (ROAD = 24) -- e o limite antes de ele
+ * passar por cima da zebra.
  */
+const MAX_KART = 15
+
 function kartRadius(spacing: number): number {
-  return Math.max(5, Math.min(10, spacing / 2.4))
+  return Math.max(5, Math.min(MAX_KART, spacing / 2.4))
 }
 
 /**
