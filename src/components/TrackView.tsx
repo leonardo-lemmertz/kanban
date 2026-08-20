@@ -16,27 +16,66 @@ import { dueState, formatDue } from '../lib/dates'
  * pista pode mudar sem mexer em nada da distribuicao.
  */
 
-const TRACK =
+/**
+ * Tracado em planta (visto de cima, sem perspectiva).
+ *
+ * A geometria esta espelhada em x justamente para que percorrer o path na ordem
+ * em que foi desenhado (largada -> S do Senna -> Curva do Sol -> reta oposta ->
+ * ... -> juncao) resulte no sentido anti-horario, que e o de Interlagos.
+ * Inverter o percurso, em vez de espelhar, embaralharia a ordem das curvas.
+ */
+const PLAN =
   'M840 380 L840 150 ' +
   'C840 112 802 80 744 90 C692 99 686 150 640 170 ' +
   'C580 195 520 148 420 140 L160 210 ' +
   'C98 228 68 282 110 320 C150 358 240 332 250 280 ' +
   'C260 228 322 240 340 290 C360 342 420 350 440 300 ' +
   'C460 248 520 258 560 300 C610 352 740 420 800 420 ' +
-  'C828 420 840 406 840 380 Z '
+  'C828 420 840 406 840 380 Z'
 
-/** Largura da faixa de asfalto e da zebra que a contorna. */
-const ROAD = 24
-const KERB = 30
+/**
+ * Projecao obliqua: achata o eixo vertical, como uma foto aerea tirada de lado
+ * em vez de exatamente de cima. E o que da a impressao de volume, junto com a
+ * sombra sob a pista e sob os karts.
+ *
+ * A projecao e assada no path (e nas coordenadas dos rotulos e da grama) em vez
+ * de virar um transform de grupo. Assim getPointAtLength() ja devolve a posicao
+ * projetada, e os textos nao saem achatados.
+ */
+const SQUASH = 0.58
+const HORIZON = 128
+
+/** Aplica a projecao a um `d` de path: pares x,y na ordem em que aparecem. */
+function project(d: string): string {
+  let index = 0
+  return d.replace(/-?\d+\.?\d*/g, (raw) => {
+    const value = Number(raw)
+    const projected = index % 2 === 0 ? value : value * SQUASH + HORIZON
+    index += 1
+    return String(Math.round(projected * 10) / 10)
+  })
+}
+
+const projectY = (y: number) => Math.round((y * SQUASH + HORIZON) * 10) / 10
+
+const TRACK = project(PLAN)
+
+/** Larguras, do centro para fora: asfalto, linha branca, zebra. */
+const ROAD = 26
+const LINES = ROAD + 4
+const KERB = ROAD + 12
+
+/** Altura da "casca" sob o asfalto, que faz a pista parecer levantada do chao. */
+const DEPTH = 9
 
 /** Cor de cada setor, na ordem das colunas. Repete se houver mais colunas. */
 const SECTOR = [
-  { road: 'stroke-sky-200 dark:stroke-sky-950', chip: 'bg-sky-200 dark:bg-sky-950' },
-  { road: 'stroke-emerald-200 dark:stroke-emerald-950', chip: 'bg-emerald-200 dark:bg-emerald-950' },
-  { road: 'stroke-amber-200 dark:stroke-amber-950', chip: 'bg-amber-200 dark:bg-amber-950' },
-  { road: 'stroke-violet-200 dark:stroke-violet-950', chip: 'bg-violet-200 dark:bg-violet-950' },
-  { road: 'stroke-rose-200 dark:stroke-rose-950', chip: 'bg-rose-200 dark:bg-rose-950' },
-  { road: 'stroke-teal-200 dark:stroke-teal-950', chip: 'bg-teal-200 dark:bg-teal-950' },
+  { road: 'stroke-sky-400/40', chip: 'bg-sky-400/70' },
+  { road: 'stroke-emerald-400/40', chip: 'bg-emerald-400/70' },
+  { road: 'stroke-amber-400/40', chip: 'bg-amber-400/70' },
+  { road: 'stroke-violet-400/40', chip: 'bg-violet-400/70' },
+  { road: 'stroke-rose-400/40', chip: 'bg-rose-400/70' },
+  { road: 'stroke-teal-400/40', chip: 'bg-teal-400/70' },
 ]
 
 /** Bandeira do kart: vem do prazo, igual aos selos do board. */
@@ -44,33 +83,28 @@ const FLAG: Record<string, { fill: string; label: string }> = {
   overdue: { fill: 'fill-red-500', label: 'atrasado' },
   today: { fill: 'fill-amber-400', label: 'vence hoje' },
   soon: { fill: 'fill-sky-500', label: 'vence em breve' },
-  later: { fill: 'fill-zinc-400 dark:fill-zinc-500', label: 'no prazo' },
-  none: { fill: 'fill-zinc-300 dark:fill-zinc-600', label: 'sem prazo' },
+  later: { fill: 'fill-zinc-300', label: 'no prazo' },
+  none: { fill: 'fill-zinc-400', label: 'sem prazo' },
 }
 
-/** Marcos do circuito, posicionados para o tracado acima. */
+/** Marcos do circuito, em coordenadas de planta (projetadas na renderizacao). */
 const LANDMARKS = [
-  { x: 726, y: 64, text: 'S do Senna' },
-  { x: 488, y: 116, text: 'Curva do Sol' },
-  { x: 294, y: 130, text: 'Reta oposta' },
-  { x: 52, y: 342, text: 'Descida do lago' },
-  { x: 183, y: 370, text: 'Ferradura' },
-  { x: 470, y: 372, text: 'Bico de pato' },
-  { x: 708, y: 452, text: 'Junção' },
-  // dentro do loop: junto a reta dos boxes o rotulo caia sobre o asfalto e sobre os karts
-  { x: 760, y: 265, text: 'Subida dos boxes' },
+  { x: 724, y: 35, text: 'S do Senna' },
+  { x: 488, y: 90, text: 'Curva do Sol' },
+  { x: 292, y: 110, text: 'Reta oposta' },
+  { x: 52, y: 366, text: 'Descida do lago' },
+  { x: 184, y: 407, text: 'Ferradura' },
+  { x: 472, y: 380, text: 'Bico de pato' },
+  { x: 708, y: 469, text: 'Junção' },
+  { x: 760, y: 262, text: 'Subida dos boxes' },
 ]
 
-/** Tufos de grama, so decoracao. Posicoes conferidas contra asfalto e rotulos. */
-const GRASS: [number, number][] = [
-  [690, 210],
-  [726, 302],
-  [668, 264],
-  [624, 228],
-  [380, 198],
-  [332, 203],
-  [284, 303],
-  [404, 248],
+/** Manchas de terra na area de escape, so ambiente. Coordenadas de planta. */
+const RUNOFF: { x: number; y: number; rx: number; ry: number }[] = [
+  { x: 700, y: 250, rx: 62, ry: 30 },
+  { x: 300, y: 250, rx: 70, ry: 26 },
+  { x: 520, y: 210, rx: 48, ry: 20 },
+  { x: 480, y: 330, rx: 56, ry: 22 },
 ]
 
 export interface TrackViewProps {
@@ -92,10 +126,6 @@ interface Kart {
  * Tamanho do kart conforme a lotacao do setor: com poucos cards fica no tamanho
  * cheio, com muitos encolhe para nao encavalar. Abaixo de 8 o desenho do kart
  * nao se le mais e viramos bolinha.
- *
- * MAX_KART = 15 deixa o kart com ~27 de comprimento e ~20 de largura, ou seja
- * quase preenchendo a faixa de asfalto (ROAD = 24) -- e o limite antes de ele
- * passar por cima da zebra.
  */
 const MAX_KART = 15
 
@@ -103,15 +133,7 @@ function kartRadius(spacing: number): number {
   return Math.max(5, Math.min(MAX_KART, spacing / 2.4))
 }
 
-/**
- * Ponto e angulo de um kart a uma dada distancia da largada.
- *
- * A geometria do TRACK esta espelhada em x justamente para que percorrer o path
- * na ordem em que foi desenhado (largada -> S do Senna -> Curva do Sol -> reta
- * oposta -> ... -> juncao) resulte no sentido anti-horario, que e o de
- * Interlagos. Inverter o percurso, em vez de espelhar, embaralharia a ordem das
- * curvas.
- */
+/** Ponto e angulo de um kart a uma dada distancia da largada. */
 function raceAt(path: SVGPathElement, length: number, distance: number) {
   const at = distance % length
   const point = path.getPointAtLength(at)
@@ -174,31 +196,70 @@ export function TrackView(props: TrackViewProps) {
   return (
     <div className="h-full overflow-y-auto p-3">
       <svg
-        viewBox="0 0 940 500"
-        className="mx-auto block w-full max-w-5xl"
+        viewBox="0 0 940 470"
+        className="mx-auto block w-full max-w-5xl overflow-hidden rounded-lg"
         role="img"
-        aria-label="O board desenhado como uma volta de kart, com um setor por coluna"
+        aria-label="O board desenhado como uma volta de kart vista de cima, com um setor por coluna"
       >
-        {/* zebra: contorno da faixa de asfalto */}
+        {/* --- terreno --- */}
+        <rect x="0" y="0" width="940" height="470" className="fill-[#5b7f4a] dark:fill-[#2f4a2a]" />
+        <rect x="0" y="0" width="940" height={projectY(60)} className="fill-[#4a6b3d] dark:fill-[#263d22]" />
+        {RUNOFF.map((patch) => (
+          <ellipse
+            key={`${patch.x}-${patch.y}`}
+            cx={patch.x}
+            cy={projectY(patch.y)}
+            rx={patch.rx}
+            ry={patch.ry * SQUASH}
+            className="fill-[#9c7040]/60 dark:fill-[#5c4426]/60"
+          />
+        ))}
+
+        {/* --- sombra da pista no chao --- */}
         <path
           d={TRACK}
           fill="none"
           strokeWidth={KERB}
           strokeLinejoin="round"
-          className="stroke-zinc-400/60 dark:stroke-zinc-600/60"
+          transform={`translate(3 ${DEPTH + 4})`}
+          className="stroke-black/25"
         />
 
-        {/* asfalto -- este e o path de referencia para todas as medidas */}
+        {/* --- casca lateral: mesma pista deslocada, dando a impressao de volume --- */}
+        <path
+          d={TRACK}
+          fill="none"
+          strokeWidth={KERB}
+          strokeLinejoin="round"
+          transform={`translate(0 ${DEPTH})`}
+          className="stroke-[#3a3a3f] dark:stroke-[#18181b]"
+        />
+
+        {/* --- zebra: vermelho e branco alternados --- */}
+        <path d={TRACK} fill="none" strokeWidth={KERB} strokeLinejoin="round" className="stroke-[#b91c1c]" />
+        <path
+          d={TRACK}
+          fill="none"
+          strokeWidth={KERB}
+          strokeDasharray="11 11"
+          strokeLinejoin="round"
+          className="stroke-zinc-100"
+        />
+
+        {/* --- linhas brancas da borda da pista --- */}
+        <path d={TRACK} fill="none" strokeWidth={LINES} strokeLinejoin="round" className="stroke-zinc-100/90" />
+
+        {/* --- asfalto: path de referencia para todas as medidas --- */}
         <path
           ref={pathRef}
           d={TRACK}
           fill="none"
           strokeWidth={ROAD}
           strokeLinejoin="round"
-          className="stroke-zinc-100 dark:stroke-zinc-800"
+          className="stroke-[#44454a] dark:stroke-[#2a2a2e]"
         />
 
-        {/* um trecho colorido do mesmo path por coluna */}
+        {/* --- um trecho colorido do mesmo path por coluna --- */}
         {length > 0 &&
           layout.map(({ column, start, share }, index) => (
             <path
@@ -212,54 +273,42 @@ export function TrackView(props: TrackViewProps) {
             />
           ))}
 
-        {/* tracejado do meio da pista */}
+        {/* --- tracejado do meio --- */}
         <path
           d={TRACK}
           fill="none"
           strokeWidth={2}
-          strokeDasharray="12 14"
+          strokeDasharray="13 15"
           strokeLinecap="round"
-          className="stroke-zinc-400 dark:stroke-zinc-500"
-          opacity={0.75}
+          className="stroke-zinc-100/60"
         />
 
         {grid && (
           <g transform={`translate(${grid.x} ${grid.y}) rotate(${grid.angle})`}>
-            {[0, 1, 2, 3, 4, 5].map((row) =>
+            {[0, 1, 2, 3, 4, 5, 6].map((row) =>
               [0, 1].map((col) => (
                 <rect
                   key={`${row}-${col}`}
                   x={col * 5}
-                  y={-ROAD / 2 + row * 4}
+                  y={-ROAD / 2 + row * (ROAD / 7)}
                   width={5}
-                  height={4}
-                  className={
-                    (row + col) % 2 === 0 ? 'fill-zinc-800 dark:fill-zinc-200' : 'fill-white dark:fill-zinc-700'
-                  }
+                  height={ROAD / 7}
+                  className={(row + col) % 2 === 0 ? 'fill-zinc-900' : 'fill-zinc-100'}
                 />
               )),
             )}
           </g>
         )}
 
-        {GRASS.map(([x, y]) => (
-          <path
-            key={`${x}-${y}`}
-            d={`M${x} ${y} l4 -7 l4 7`}
-            fill="none"
-            strokeWidth={1.5}
-            strokeLinecap="round"
-            className="stroke-emerald-500/50 dark:stroke-emerald-600/60"
-          />
-        ))}
-
         {LANDMARKS.map((mark) => (
           <text
             key={mark.text}
             x={mark.x}
-            y={mark.y}
+            y={projectY(mark.y)}
             textAnchor="middle"
-            className="fill-zinc-400 text-[11px] dark:fill-zinc-500"
+            paintOrder="stroke"
+            strokeWidth={2.5}
+            className="fill-zinc-50 stroke-black/45 text-[11px] font-medium"
           >
             {mark.text}
           </text>
@@ -290,42 +339,43 @@ export function TrackView(props: TrackViewProps) {
                 </title>
 
                 {selected && (
-                  <circle
+                  <ellipse
                     cx={x}
                     cy={y}
-                    r={radius + 5}
+                    rx={radius + 6}
+                    ry={(radius + 6) * 0.7}
                     fill="none"
                     strokeWidth={2}
-                    className="stroke-sky-600 dark:stroke-sky-400"
+                    className="stroke-sky-300"
                   />
                 )}
 
                 {radius >= 8 ? (
-                  // kart visto de cima, apontado na direcao da volta
-                  <g transform={`translate(${x} ${y}) rotate(${angle}) scale(${radius / 10})`}>
-                    <rect x={-8} y={-6.6} width={5} height={2.6} rx={1} className="fill-zinc-700 dark:fill-zinc-950" />
-                    <rect x={-8} y={4} width={5} height={2.6} rx={1} className="fill-zinc-700 dark:fill-zinc-950" />
-                    <rect x={4} y={-6.6} width={4.5} height={2.6} rx={1} className="fill-zinc-700 dark:fill-zinc-950" />
-                    <rect x={4} y={4} width={4.5} height={2.6} rx={1} className="fill-zinc-700 dark:fill-zinc-950" />
+                  <g transform={`translate(${x} ${y}) rotate(${angle}) scale(${radius / 10} ${(radius / 10) * 0.8})`}>
+                    {/* sombra no asfalto */}
+                    <ellipse cx={1} cy={4} rx={10} ry={4.5} className="fill-black/35" />
+                    <rect x={-8} y={-6.6} width={5} height={2.6} rx={1} className="fill-zinc-900" />
+                    <rect x={-8} y={4} width={5} height={2.6} rx={1} className="fill-zinc-900" />
+                    <rect x={4} y={-6.6} width={4.5} height={2.6} rx={1} className="fill-zinc-900" />
+                    <rect x={4} y={4} width={4.5} height={2.6} rx={1} className="fill-zinc-900" />
                     <rect
                       x={-9}
                       y={-4.4}
                       width={18}
                       height={8.8}
                       rx={3}
-                      className={`${flag.fill} stroke-white dark:stroke-zinc-900`}
-                      strokeWidth={1.2}
+                      className={`${flag.fill} stroke-black/40`}
+                      strokeWidth={1}
                     />
-                    <circle cx={1} cy={0} r={2.6} className="fill-white dark:fill-zinc-200" />
+                    {/* brilho no topo do chassi, para nao parecer chapado */}
+                    <rect x={-7} y={-3.6} width={14} height={2} rx={1} className="fill-white/25" />
+                    <circle cx={1} cy={0} r={2.6} className="fill-zinc-100" />
                   </g>
                 ) : (
-                  <circle
-                    cx={x}
-                    cy={y}
-                    r={radius}
-                    className={`${flag.fill} stroke-white dark:stroke-zinc-900`}
-                    strokeWidth={1.5}
-                  />
+                  <>
+                    <ellipse cx={x + 1} cy={y + radius * 0.5} rx={radius} ry={radius * 0.5} className="fill-black/35" />
+                    <circle cx={x} cy={y} r={radius} className={`${flag.fill} stroke-black/40`} strokeWidth={1.2} />
+                  </>
                 )}
               </g>
             )
@@ -340,7 +390,7 @@ export function TrackView(props: TrackViewProps) {
             return (
               <span key={column.id} className="inline-flex items-center gap-1.5 text-[12px]">
                 <span
-                  className={`h-2.5 w-5 rounded-sm border border-zinc-300 dark:border-zinc-700 ${SECTOR[index % SECTOR.length].chip}`}
+                  className={`h-2.5 w-5 rounded-sm border border-zinc-400/60 ${SECTOR[index % SECTOR.length].chip}`}
                   aria-hidden="true"
                 />
                 <span className="font-medium">{column.title}</span>

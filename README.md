@@ -91,6 +91,10 @@ Quando o token expirar, o app mostra um aviso vermelho com botão para a tela de
 
 Aba ao lado de **Board**: o mesmo board desenhado como uma volta de kart, com traçado inspirado em Interlagos (S do Senna, Curva do Sol, reta oposta, ferradura, junção, subida dos boxes).
 
+O desenho imita uma foto aérea: asfalto escuro com linhas brancas nas bordas, zebra vermelha e branca, grama e áreas de escape em volta, e sombra sob a pista e sob cada kart. A impressão de volume vem de uma **projeção oblíqua** — o eixo vertical é achatado (`SQUASH`), como numa foto tirada de lado em vez de exatamente de cima.
+
+A projeção é aplicada ao próprio `d` do path, não a um `transform` de grupo. Isso importa por dois motivos: `getPointAtLength()` já devolve a posição projetada (nada a converter na hora de posicionar os karts) e os textos dos marcos não saem achatados. O traçado em planta fica legível no código, em `PLAN`.
+
 - Cada **coluna** do board é um **setor** da pista, na ordem em que estão no board — renomear ou reordenar colunas muda a pista sozinho.
 - Cada **card** é um kart, distribuído dentro do seu setor pela ordem que tem na coluna.
 - A **cor do kart** é a bandeira do prazo: vermelho atrasado, âmbar vence hoje, azul vence em breve, cinza sem prazo.
