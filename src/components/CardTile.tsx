@@ -3,6 +3,7 @@ import type { Card, Column } from '../types'
 import { PRIORITY_LABEL } from '../types'
 import { PRIORITY_EDGE, PRIORITY_PILL } from '../lib/priority'
 import { dueState, formatDue } from '../lib/dates'
+import { checklistStats, nearestItemDue } from '../lib/checklist'
 import { MoveMenu } from './MoveMenu'
 
 const DUE_BADGE: Record<string, string> = {
@@ -38,6 +39,10 @@ export interface CardTileProps {
 export function CardTile(props: CardTileProps) {
   const { card } = props
   const due = dueState(card.dueDate)
+  const stats = checklistStats(card.checklist)
+  /** So mostra a data de item quando o card nao tem prazo proprio, para nao poluir. */
+  const itemDue = card.dueDate ? undefined : nearestItemDue(card.checklist)
+  const itemDueState = dueState(itemDue)
 
   return (
     <article
@@ -96,6 +101,32 @@ export function CardTile(props: CardTileProps) {
             >
               {DUE_PREFIX[due]}
               {formatDue(card.dueDate)}
+            </span>
+          )}
+
+          {stats.total > 0 && (
+            <span
+              className={`rounded-sm border px-1 text-[10px] font-medium leading-4 tabular-nums ${
+                stats.done === stats.total
+                  ? 'border-emerald-400 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400'
+                  : 'border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-400'
+              }`}
+              title={`${stats.done} de ${stats.total} itens feitos${
+                stats.waiting > 0 ? `, ${stats.waiting} aguardando` : ''
+              }`}
+            >
+              {stats.done}/{stats.total}
+              {stats.waiting > 0 && <span className="ml-0.5 text-amber-600 dark:text-amber-400">·{stats.waiting}</span>}
+            </span>
+          )}
+
+          {itemDue && (
+            <span
+              className={`rounded-sm border px-1 text-[10px] font-medium leading-4 tabular-nums ${DUE_BADGE[itemDueState]}`}
+              title="Data mais próxima entre os itens do card"
+            >
+              {DUE_PREFIX[itemDueState]}
+              {formatDue(itemDue)}
             </span>
           )}
 

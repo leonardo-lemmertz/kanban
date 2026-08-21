@@ -87,6 +87,26 @@ Quando o token expirar, o app mostra um aviso vermelho com botão para a tela de
 - **WIP limit:** o contador da coluna fica vermelho quando passa do limite (menu ⋯ da coluna para definir).
 - **Arquivar em vez de excluir:** o card sai do board e continua consultável na aba **Arquivo**, de onde pode voltar para qualquer coluna.
 
+### Itens dentro do card
+
+Um card grande costuma ser, na prática, muitas tarefas pequenas — uma frente com vários interlocutores, cada um num estado diferente. Para isso o card tem uma lista de itens, no painel lateral.
+
+Cada item tem **três estados**, não dois: **a fazer**, **aguardando** e **feito**. O terceiro existe porque boa parte do trabalho não é nem pendente nem pronta — está na mão de outra pessoa. Clicar no marcador percorre os três.
+
+- **Contador de espera**: o item em "aguardando" mostra há quantos dias está assim. É o que transforma "esperando retorno" em "esperando há 9 dias, hora de cobrar".
+- **Data e hora por item**, independentes do prazo do card. Uma reunião marcada dentro de um item vira selo de verdade.
+- **No card, no board**: um `3/22` com o total, o número de itens aguardando em âmbar, e — quando o card não tem prazo próprio — a data mais próxima entre os itens.
+- **A busca enxerga os itens**, então procurar por um fornecedor acha o card que o menciona.
+
+#### Converter uma descrição em itens
+
+Card cujo texto já é uma lista (uma linha por assunto) ganha o botão **Converter descrição em N itens**. Cada linha vira um item, com dois chutes informados:
+
+- linhas com "aguardando", "em contato", "chamei", "chamar" ou "retorno" viram **aguardando**;
+- `24/08` vira data e `10h` vira hora — com cuidado para não confundir telefone (`0800 006 9500`) nem link (`meet.google.com/...`) com data.
+
+É um chute, não uma promessa: revise depois. Por isso a conversão **não apaga a descrição original**, e o botão some assim que a lista tem itens, para não duplicar tudo num segundo clique.
+
 ### Vista "Pista"
 
 Aba ao lado de **Board**: o mesmo board desenhado como uma volta de kart, com traçado inspirado em Interlagos (S do Senna, Curva do Sol, reta oposta, ferradura, junção, subida dos boxes).
@@ -179,7 +199,8 @@ O push na `main` dispara `.github/workflows/deploy.yml`, que faz o build e publi
 
 ```
 src/
-  types.ts              Board, Column, Card, Priority, SCHEMA_VERSION
+  types.ts              Board, Column, Card, ChecklistItem, SCHEMA_VERSION
+  lib/checklist.ts      estatisticas, contagem de espera e conversao de descricao
   storage/              persistência: uma interface, três adaptadores
     localAdapter.ts       localStorage (padrão)
     fileAdapter.ts        File System Access API, arquivo local
@@ -196,4 +217,4 @@ src/
 
 Dependências de runtime: só `react` e `react-dom`. O markdown é renderizado por código próprio produzindo elementos React (nunca `innerHTML`), com whitelist de protocolo nos links — num app que guarda token no navegador, um XSS na descrição do card seria roubo de token.
 
-Para mudar o formato do `board.json`, incremente `SCHEMA_VERSION` em `src/types.ts` e trate a versão antiga em `src/storage/migrate.ts`.
+Para mudar o formato do `board.json`, incremente `SCHEMA_VERSION` em `src/types.ts` e trate a versão antiga em `src/storage/migrate.ts`. O schema está na **versão 2**, que acrescentou `checklist` ao card; board gravado na versão 1 abre normalmente, com a lista vazia.

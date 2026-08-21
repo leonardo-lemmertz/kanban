@@ -54,7 +54,8 @@ export function App() {
         q === '' ||
         card.title.toLowerCase().includes(q) ||
         card.description.toLowerCase().includes(q) ||
-        card.tags.some((t) => t.toLowerCase().includes(q))
+        card.tags.some((t) => t.toLowerCase().includes(q)) ||
+        card.checklist.some((item) => item.text.toLowerCase().includes(q))
       const matchesTag = tag === '' || card.tags.includes(tag)
       const matchesPriority = priority === '' || card.priority === priority
       if (!(matchesQuery && matchesTag && matchesPriority)) hidden.add(card.id)
@@ -225,6 +226,12 @@ export function App() {
             if (editing)
               dispatch({ type: 'card/move', id: editing.id, toColumnId: columnId, toIndex: Number.MAX_SAFE_INTEGER })
           }}
+          onItemAdd={(text) => editing && dispatch({ type: 'item/add', cardId: editing.id, text })}
+          onItemPatch={(itemId, patch) => editing && dispatch({ type: 'item/update', cardId: editing.id, itemId, patch })}
+          onItemState={(itemId, state) => editing && dispatch({ type: 'item/state', cardId: editing.id, itemId, state })}
+          onItemMove={(itemId, delta) => editing && dispatch({ type: 'item/move', cardId: editing.id, itemId, delta })}
+          onItemDelete={(itemId) => editing && dispatch({ type: 'item/delete', cardId: editing.id, itemId })}
+          onItemsFromDescription={() => editing && dispatch({ type: 'item/fromDescription', cardId: editing.id })}
         />
       )}
     </div>

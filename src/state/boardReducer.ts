@@ -1,5 +1,14 @@
-import { SCHEMA_VERSION, type Board, type Card, type Column, type Priority } from '../types'
+import {
+  SCHEMA_VERSION,
+  type Board,
+  type Card,
+  type ChecklistItem,
+  type Column,
+  type ItemState,
+  type Priority,
+} from '../types'
 import { newId } from '../lib/ids'
+import { newChecklistItem, parseDescriptionToChecklist } from '../lib/checklist'
 
 export interface NewCardInput {
   columnId: string
@@ -11,6 +20,8 @@ export interface NewCardInput {
 }
 
 export type CardPatch = Partial<Pick<Card, 'title' | 'description' | 'priority' | 'tags' | 'dueDate'>>
+
+export type ItemPatch = Partial<Pick<ChecklistItem, 'text' | 'dueDate' | 'time'>>
 
 export type Action =
   | { type: 'card/create'; input: NewCardInput; atTop?: boolean }
@@ -24,6 +35,12 @@ export type Action =
   | { type: 'column/wip'; id: string; wipLimit?: number }
   | { type: 'column/move'; id: string; toIndex: number }
   | { type: 'column/delete'; id: string; moveCardsTo?: string }
+  | { type: 'item/add'; cardId: string; text: string }
+  | { type: 'item/update'; cardId: string; itemId: string; patch: ItemPatch }
+  | { type: 'item/state'; cardId: string; itemId: string; state: ItemState }
+  | { type: 'item/move'; cardId: string; itemId: string; delta: number }
+  | { type: 'item/delete'; cardId: string; itemId: string }
+  | { type: 'item/fromDescription'; cardId: string }
   | { type: 'board/replace'; board: Board; reason: string }
   | { type: 'board/archiveColumn'; columnId: string }
 
@@ -66,6 +83,23 @@ function noop(board: Board): ActionResult {
   return { board, message: '' }
 }
 
+/** Reescreve o checklist de um card, carimbando o updatedAt do card junto. */
+function withChecklist(
+  board: Board,
+  cardId: string,
+  now: string,
+  change: (items: ChecklistItem[], card: Card) => ChecklistItem[] | null,
+): Board | null {
+  const card = board.cards.find((c) => c.id === cardId)
+  if (!card) return null
+  const checklist = change(card.checklist, card)
+  if (checklist === null) return null
+  return {
+    ...board,
+    cards: board.cards.map((c) => (c.id === cardId ? { ...c, checklist, updatedAt: now } : c)),
+  }
+}
+
 export function applyAction(board: Board, action: Action): ActionResult {
   const now = new Date().toISOString()
 
@@ -85,6 +119,7 @@ export function applyAction(board: Board, action: Action): ActionResult {
         ...(action.input.dueDate ? { dueDate: action.input.dueDate } : {}),
         createdAt: now,
         updatedAt: now,
+        checklist: [],
         order: action.atTop
           ? (siblings[0]?.order ?? STEP * 2) - STEP
           : (siblings[siblings.length - 1]?.order ?? 0) + STEP,
@@ -286,6 +321,97 @@ export function applyAction(board: Board, action: Action): ActionResult {
           archived: [...affected.map((c) => ({ ...c, updatedAt: now, archivedAt: now })), ...board.archived],
         }),
         message: `chore: arquiva ${affected.length} card(s) de ${columnTitle(board, action.columnId)}`,
+      }
+    }
+
+    case 'item/add': {
+      const text = action.text.trim()
+      if (text === '') return noop(board)
+      const card = board.cards.find((c) => c.id === action.cardId)
+      if (!card) return noop(board)
+      const next = withChecklist(board, action.cardId, now, (items) => [...items, newChecklistItem(text)])
+      if (!next) return noop(board)
+      return { board: stamp(next), message: `chore: adiciona "${quote(text)}" em "${quote(card.title)}"` }
+    }
+
+    case 'item/update': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      const item = card?.checklist.find((i) => i.id === action.itemId)
+      if (!card || !item) return noop(board)
+      const patch = action.patch
+      if (patch.text !== undefined && patch.text.trim() === '') return noop(board)
+      const next = withChecklist(board, action.cardId, now, (items) =>
+        items.map((current) => {
+          if (current.id !== action.itemId) return current
+          const updated: ChecklistItem = { ...current, ...patch, updatedAt: now }
+          if (patch.text !== undefined) updated.text = patch.text.trim()
+          if ('dueDate' in patch && !patch.dueDate) delete updated.dueDate
+          if ('time' in patch && !patch.time) delete updated.time
+          return updated
+        }),
+      )
+      if (!next) return noop(board)
+      return { board: stamp(next), message: `chore: edita item "${quote(item.text)}" de "${quote(card.title)}"` }
+    }
+
+    case 'item/state': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      const item = card?.checklist.find((i) => i.id === action.itemId)
+      if (!card || !item || item.state === action.state) return noop(board)
+      const next = withChecklist(board, action.cardId, now, (items) =>
+        items.map((current) => {
+          if (current.id !== action.itemId) return current
+          const updated: ChecklistItem = { ...current, state: action.state, updatedAt: now }
+          // o relogio da espera comeca quando entra em aguardando e some ao sair
+          if (action.state === 'waiting') updated.waitingSince = now
+          else delete updated.waitingSince
+          return updated
+        }),
+      )
+      if (!next) return noop(board)
+      const label = action.state === 'done' ? 'conclui' : action.state === 'waiting' ? 'põe em espera' : 'reabre'
+      return { board: stamp(next), message: `chore: ${label} item "${quote(item.text)}" de "${quote(card.title)}"` }
+    }
+
+    case 'item/move': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      if (!card) return noop(board)
+      const from = card.checklist.findIndex((i) => i.id === action.itemId)
+      const to = from + action.delta
+      if (from === -1 || to < 0 || to >= card.checklist.length) return noop(board)
+      const next = withChecklist(board, action.cardId, now, (items) => {
+        const list = [...items]
+        const [moved] = list.splice(from, 1)
+        list.splice(to, 0, moved)
+        return list
+      })
+      if (!next) return noop(board)
+      return {
+        board: stamp(next),
+        message: `chore: reordena item "${quote(card.checklist[from].text)}" de "${quote(card.title)}"`,
+      }
+    }
+
+    case 'item/delete': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      const item = card?.checklist.find((i) => i.id === action.itemId)
+      if (!card || !item) return noop(board)
+      const next = withChecklist(board, action.cardId, now, (items) => items.filter((i) => i.id !== action.itemId))
+      if (!next) return noop(board)
+      return { board: stamp(next), message: `chore: remove item "${quote(item.text)}" de "${quote(card.title)}"` }
+    }
+
+    case 'item/fromDescription': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      if (!card) return noop(board)
+      const parsed = parseDescriptionToChecklist(card.description)
+      if (parsed.items.length === 0) return noop(board)
+      // acrescenta ao que ja existe; a descricao original fica intacta
+      const next = withChecklist(board, action.cardId, now, (items) => [...items, ...parsed.items])
+      if (!next) return noop(board)
+      return {
+        board: stamp(next),
+        message: `feat: converte descrição de "${quote(card.title)}" em ${parsed.items.length} item(ns)`,
       }
     }
 

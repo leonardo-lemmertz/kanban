@@ -21,6 +21,7 @@ export function createSeedBoard(): Board {
   const base = {
     description: '',
     tags: [] as string[],
+    checklist: [],
     createdAt: now,
     updatedAt: now,
   }
