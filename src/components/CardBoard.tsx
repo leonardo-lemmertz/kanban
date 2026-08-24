@@ -59,7 +59,9 @@ function MiniCard(props: MiniCardProps) {
   const { item } = props
   const [menu, setMenu] = useState(false)
   const due = dueState(item.dueDate)
-  const waited = item.state === 'waiting' && item.waitingSince ? daysSince(item.waitingSince) : null
+  // igual a lista: espera de zero dia nao vira selo (ver ChecklistEditor)
+  const days = item.state === 'waiting' && item.waitingSince ? daysSince(item.waitingSince) : null
+  const waited = days !== null && days > 0 ? days : null
 
   return (
     <article
@@ -78,7 +80,8 @@ function MiniCard(props: MiniCardProps) {
         <button
           type="button"
           onClick={props.onOpen}
-          className={`min-w-0 flex-1 break-words text-left text-[12px] leading-snug ${
+          title={item.text}
+          className={`min-w-0 flex-1 break-words text-left text-[12px] leading-snug line-clamp-3 ${
             item.state === 'done' ? 'text-zinc-400 line-through dark:text-zinc-600' : ''
           }`}
         >
@@ -106,7 +109,7 @@ function MiniCard(props: MiniCardProps) {
               className="rounded-sm border border-amber-400 px-1 text-[10px] leading-4 text-amber-700 dark:border-amber-700 dark:text-amber-400"
               title="Tempo desde que entrou nesta raia"
             >
-              {waited === 0 ? 'hoje' : `há ${waited}d`}
+              há {waited}d
             </span>
           )}
           {item.dueDate && (
