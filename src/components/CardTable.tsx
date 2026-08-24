@@ -1,14 +1,25 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Card } from '../types'
-import { SITUATION_LABEL, parseRows, type Row, type Situation } from '../lib/rows'
+import {
+  SITUATIONS,
+  SITUATION_LABEL,
+  addRow,
+  parseRows,
+  removeRow,
+  setRowDetail,
+  setRowName,
+  setRowSituation,
+  type Row,
+  type Situation,
+} from '../lib/rows'
 import { dueState, formatDue, todayISO } from '../lib/dates'
 
 /**
- * A descricao de um card lida como tabela.
+ * A descricao de um card lida -- e editada -- como tabela.
  *
- * E uma vista, nao um formato: nada e gravado aqui e a descricao continua sendo
- * a fonte de verdade. O ganho e poder ler por coluna -- quem esta aguardando,
- * quem tem reuniao marcada -- coisa que paragrafo nao permite.
+ * Cada celula grava de volta na propria descricao: nao existe campo novo, nao
+ * existe dado duplicado. O ganho e poder ler e mexer por coluna (quem esta
+ * aguardando, quem tem reuniao marcada), coisa que paragrafo nao permite.
  */
 
 const DOT: Record<Situation, string> = {
@@ -26,31 +37,92 @@ const DUE_TEXT: Record<string, string> = {
   none: '',
 }
 
-/** Ordem em que as situacoes aparecem quando se ordena por essa coluna. */
-const SITUATION_ORDER: Situation[] = ['meeting', 'waiting', 'todo', 'untouched']
-
 type SortKey = 'original' | 'name' | 'situation' | 'when'
+
+/** Celula de texto: guarda um rascunho e so grava ao sair do campo ou no Enter. */
+function TextCell(props: {
+  value: string
+  placeholder?: string
+  autoFocus?: boolean
+  className?: string
+  onCommit: (value: string) => void
+}) {
+  const [draft, setDraft] = useState(props.value)
+  const ref = useRef<HTMLInputElement>(null)
+  /** ultimo texto ja gravado, para o Enter seguido de blur nao gravar duas vezes */
+  const saved = useRef(props.value)
+
+  // o texto pode mudar por fora (editar a descricao, desfazer): reacompanha
+  useEffect(() => {
+    setDraft(props.value)
+    saved.current = props.value
+  }, [props.value])
+
+  const commit = (value: string) => {
+    if (value === saved.current) return
+    saved.current = value
+    props.onCommit(value)
+  }
+
+  useEffect(() => {
+    if (props.autoFocus) {
+      ref.current?.focus()
+      ref.current?.select()
+    }
+  }, [props.autoFocus])
+
+  return (
+    <input
+      ref={ref}
+      value={draft}
+      placeholder={props.placeholder}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => commit(draft)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          // grava aqui mesmo: nem todo navegador dispara o blur do jeito esperado
+          event.preventDefault()
+          commit(draft)
+          event.currentTarget.blur()
+        }
+        if (event.key === 'Escape') {
+          // sem isso o Esc fecharia a tabela inteira e o rascunho se perderia
+          event.stopPropagation()
+          setDraft(props.value)
+          saved.current = props.value
+          event.currentTarget.blur()
+        }
+      }}
+      className={`w-full rounded border border-transparent bg-transparent px-1 py-0.5 hover:border-zinc-300
+        focus:border-sky-600 focus:bg-white focus:outline-none dark:hover:border-zinc-700
+        dark:focus:border-sky-400 dark:focus:bg-zinc-900 ${props.className ?? ''}`}
+    />
+  )
+}
 
 export interface CardTableProps {
   card: Card
   onBack: () => void
   onEditDescription: () => void
+  onChangeDescription: (description: string) => void
 }
 
 export function CardTable(props: CardTableProps) {
   const [sort, setSort] = useState<SortKey>('original')
+  /** linha recem-criada, para o cursor ja cair no nome dela */
+  const [focusLine, setFocusLine] = useState<number | null>(null)
   const today = todayISO()
   const year = Number(today.slice(0, 4))
 
-  const { rows, notes } = useMemo(() => parseRows(props.card.description, year), [props.card.description, year])
+  const description = props.card.description
+  const { rows, notes } = useMemo(() => parseRows(description, year), [description, year])
 
   const sorted = useMemo(() => {
     const list = [...rows]
     if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
     if (sort === 'situation')
       list.sort(
-        (a, b) =>
-          SITUATION_ORDER.indexOf(a.situation) - SITUATION_ORDER.indexOf(b.situation) || a.index - b.index,
+        (a, b) => SITUATIONS.indexOf(a.situation) - SITUATIONS.indexOf(b.situation) || a.index - b.index,
       )
     if (sort === 'when')
       // sem data vai para o fim, senao a coluna vazia enterra as reunioes
@@ -101,11 +173,12 @@ export function CardTable(props: CardTableProps) {
         <table className="w-full border-collapse text-[12px]">
           <thead className="text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
             <tr className="border-b border-zinc-300 dark:border-zinc-700">
-              {header('name', 'Fornecedor', 'w-40')}
+              {header('name', 'Fornecedor', 'w-44')}
               {header('situation', 'Situação', 'w-44')}
               <th className="px-2 py-1 text-left font-semibold">Detalhe</th>
-              <th className="px-2 py-1 text-left font-semibold w-36">Contato</th>
+              <th className="w-32 px-2 py-1 text-left font-semibold">Contato</th>
               {header('when', 'Quando', 'w-28')}
+              <th className="w-8 px-2 py-1" />
             </tr>
           </thead>
           <tbody>
@@ -113,28 +186,89 @@ export function CardTable(props: CardTableProps) {
               const due = dueState(row.date)
               return (
                 <tr
-                  key={`${row.index}-${row.name}`}
-                  className="border-b border-zinc-200 align-top hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/60"
+                  key={row.line}
+                  className="group border-b border-zinc-200 align-middle hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/60"
                 >
-                  <td className="px-2 py-1.5 font-medium">{row.name}</td>
-                  <td className="px-2 py-1.5">
-                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <td className="px-1 py-0.5">
+                    <TextCell
+                      value={row.name}
+                      autoFocus={row.line === focusLine}
+                      className="font-medium"
+                      onCommit={(value) => props.onChangeDescription(setRowName(description, row.line, value))}
+                    />
+                  </td>
+                  <td className="px-1 py-0.5">
+                    <span className="inline-flex w-full items-center gap-1.5">
                       <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[row.situation]}`} aria-hidden="true" />
-                      {SITUATION_LABEL[row.situation]}
+                      <select
+                        value={row.situation}
+                        onChange={(event) =>
+                          props.onChangeDescription(
+                            setRowSituation(description, row.line, event.target.value as Situation),
+                          )
+                        }
+                        title={
+                          row.explicit
+                            ? 'Situação marcada à mão — aparece no texto como [marcador]'
+                            : 'Situação deduzida do texto'
+                        }
+                        className="w-full cursor-pointer rounded border border-transparent bg-transparent px-1 py-0.5
+                          hover:border-zinc-300 focus:border-sky-600 focus:outline-none dark:hover:border-zinc-700
+                          dark:focus:border-sky-400"
+                      >
+                        {SITUATIONS.map((situation) => (
+                          <option key={situation} value={situation}>
+                            {SITUATION_LABEL[situation]}
+                          </option>
+                        ))}
+                      </select>
                     </span>
                   </td>
-                  <td className="px-2 py-1.5 text-zinc-600 dark:text-zinc-400">{row.detail || '—'}</td>
+                  <td className="px-1 py-0.5">
+                    <TextCell
+                      value={row.detail}
+                      placeholder="—"
+                      className="text-zinc-600 dark:text-zinc-400"
+                      onCommit={(value) => props.onChangeDescription(setRowDetail(description, row.line, value))}
+                    />
+                  </td>
                   <td className="px-2 py-1.5 whitespace-nowrap text-zinc-600 dark:text-zinc-400">
                     {row.contact || '—'}
                   </td>
                   <td className={`px-2 py-1.5 whitespace-nowrap tabular-nums ${DUE_TEXT[due]}`}>
                     {row.date ? `${formatDue(row.date)}${row.time ? ` ${row.time}` : ''}` : '—'}
                   </td>
+                  <td className="px-1 py-0.5 text-right">
+                    <button
+                      type="button"
+                      title="Apagar esta linha"
+                      className="rounded px-1 text-zinc-400 opacity-0 hover:bg-red-50 hover:text-red-700
+                        focus:opacity-100 group-hover:opacity-100 dark:hover:bg-red-950 dark:hover:text-red-400"
+                      onClick={() => {
+                        const ok = window.confirm(`Apagar a linha "${row.name}"?`)
+                        if (ok) props.onChangeDescription(removeRow(description, row.line))
+                      }}
+                    >
+                      ×
+                    </button>
+                  </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
+
+        <button
+          type="button"
+          className="btn mt-2"
+          onClick={() => {
+            const next = addRow(description, 'Novo')
+            setFocusLine(next.line)
+            props.onChangeDescription(next.description)
+          }}
+        >
+          + Linha
+        </button>
 
         {notes.length > 0 && (
           <div className="mt-3 border-t border-zinc-200 pt-2 dark:border-zinc-800">
@@ -150,8 +284,8 @@ export function CardTable(props: CardTableProps) {
         )}
 
         <p className="mt-3 text-[11px] text-zinc-400 dark:text-zinc-500">
-          Esta tabela é só uma forma de ler a descrição do card — nada aqui é gravado separado. Para mudar qualquer
-          linha, edite o texto.
+          Clique em qualquer célula para editar — o que você escreve aqui é gravado na descrição do card. As colunas
+          Contato e Quando saem do próprio detalhe (escreva por exemplo <span className="tabular-nums">25/08 14h</span>).
         </p>
       </div>
     </div>

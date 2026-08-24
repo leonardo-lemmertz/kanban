@@ -1,8 +1,10 @@
 /**
- * Le a descricao de um card como tabela.
+ * Le e reescreve a descricao de um card como tabela.
  *
- * Nada aqui grava nada: a descricao continua sendo a unica fonte de verdade, e a
- * tabela e so uma leitura dela. O usuario escreve prosa como sempre escreveu.
+ * A descricao continua sendo a unica fonte de verdade: nao existe campo novo no
+ * board.json, nao existe migracao. A tabela le linhas e, quando o usuario edita
+ * uma celula, reescreve a mesma linha de volta no texto. Quem abre o card ve a
+ * prosa de sempre.
  *
  * O formato reconhecido e o que ele ja usa naturalmente, uma linha por assunto:
  *
@@ -22,12 +24,44 @@ export const SITUATION_LABEL: Record<Situation, string> = {
   untouched: 'Sem contato',
 }
 
+/** Ordem em que as situacoes aparecem na lista e ao ordenar por essa coluna. */
+export const SITUATIONS: Situation[] = ['meeting', 'waiting', 'todo', 'untouched']
+
+/**
+ * Marcador escrito no fim da linha quando a situacao escolhida a mao difere da
+ * que o texto sugere -- ex.: a reuniao ja aconteceu e agora e so espera:
+ *
+ *     Akropoli: Reunião 24/08 14h [aguardando]
+ *
+ * Fica visivel no texto de proposito: nada some da descricao sem o usuario ver.
+ */
+const MARKER_WORD: Record<Situation, string> = {
+  meeting: 'reunião',
+  waiting: 'aguardando',
+  todo: 'a fazer',
+  untouched: 'sem contato',
+}
+
+const MARKER_BY_WORD: Record<string, Situation> = {
+  'reunião': 'meeting',
+  reuniao: 'meeting',
+  aguardando: 'waiting',
+  'a fazer': 'todo',
+  'sem contato': 'untouched',
+}
+
+const MARKER_RE = /\s*\[(reuni[aã]o|aguardando|a fazer|sem contato)\]\s*$/i
+
 export interface Row {
-  /** posicao na descricao, para poder voltar a ordem original */
+  /** posicao entre as linhas de assunto, para poder voltar a ordem do texto */
   index: number
+  /** numero da linha na descricao, para poder reescrever exatamente essa linha */
+  line: number
   name: string
   detail: string
   situation: Situation
+  /** situacao escolhida a mao, e nao deduzida do texto */
+  explicit: boolean
   /** canais achados no texto, ex.: "WhatsApp · e-mail" */
   contact: string
   /** YYYY-MM-DD, para ordenar */
@@ -65,7 +99,7 @@ function pad(value: number): string {
   return String(value).padStart(2, '0')
 }
 
-function situationOf(detail: string): Situation {
+function guessSituation(detail: string): Situation {
   if (detail.trim() === '') return 'untouched'
   // reuniao antes de aguardando: "Reunião 24/08" nao e espera, e compromisso
   if (MEETING_RE.test(detail)) return 'meeting'
@@ -103,35 +137,68 @@ function whenOf(detail: string, referenceYear: number): { date?: string; time?: 
   return out
 }
 
+/** As partes de uma linha de assunto; null quando a linha nao e um assunto. */
+interface Parts {
+  bullet: string
+  name: string
+  detail: string
+  /** situacao marcada a mao, se houver */
+  marker: Situation | null
+}
+
+function partsOf(raw: string): Parts | null {
+  const bullet = BULLET_RE.exec(raw)?.[0] ?? ''
+  const body = raw.slice(bullet.length).trim()
+  if (body === '') return null
+
+  const at = body.indexOf(':')
+  // dois-pontos logo no comeco, ou dentro de "https://", nao separa nada
+  const name = at > 0 ? body.slice(0, at).trim() : ''
+  if (at <= 0 || name === '' || name.length > 40 || /https?$/i.test(name)) return null
+
+  let detail = body.slice(at + 1).trim()
+  let marker: Situation | null = null
+  const found = MARKER_RE.exec(detail)
+  if (found) {
+    marker = MARKER_BY_WORD[found[1].toLowerCase()] ?? null
+    if (marker !== null) detail = detail.slice(0, found.index).trim()
+  }
+
+  return { bullet, name, detail, marker }
+}
+
+/** Escreve a linha de volta, guardando o marcador so quando ele muda algo. */
+function renderParts(parts: Parts): string {
+  const marker =
+    parts.marker !== null && parts.marker !== guessSituation(parts.detail) ? ` [${MARKER_WORD[parts.marker]}]` : ''
+  return `${parts.bullet}${parts.name}:${parts.detail === '' ? '' : ` ${parts.detail}`}${marker}`
+}
+
 export function parseRows(description: string, referenceYear: number): ParsedRows {
   const rows: Row[] = []
   const notes: string[] = []
 
-  const lines = description
-    .replace(/\r\n?/g, '\n')
-    .split('\n')
-    .map((raw) => raw.replace(BULLET_RE, '').trim())
-    .filter((line) => line !== '')
+  const lines = description.replace(/\r\n?/g, '\n').split('\n')
 
-  for (const line of lines) {
-    const at = line.indexOf(':')
-    // dois-pontos logo no comeco, ou dentro de "https://", nao separa nada
-    const name = at > 0 ? line.slice(0, at).trim() : ''
-    if (at <= 0 || name === '' || name.length > 40 || /https?$/i.test(name)) {
-      notes.push(line)
-      continue
+  lines.forEach((raw, line) => {
+    if (raw.trim() === '') return
+    const parts = partsOf(raw)
+    if (parts === null) {
+      notes.push(raw.trim())
+      return
     }
-
-    const detail = line.slice(at + 1).trim()
+    const situation = parts.marker ?? guessSituation(parts.detail)
     rows.push({
       index: rows.length,
-      name,
-      detail,
-      situation: situationOf(detail),
-      contact: contactOf(detail),
-      ...whenOf(detail, referenceYear),
+      line,
+      name: parts.name,
+      detail: parts.detail,
+      situation,
+      explicit: parts.marker !== null && parts.marker !== guessSituation(parts.detail),
+      contact: contactOf(parts.detail),
+      ...whenOf(parts.detail, referenceYear),
     })
-  }
+  })
 
   return { rows, notes }
 }
@@ -139,4 +206,48 @@ export function parseRows(description: string, referenceYear: number): ParsedRow
 /** A tabela so vale a pena quando ha varias linhas no formato "nome: detalhe". */
 export function looksLikeTable(description: string, referenceYear: number): boolean {
   return parseRows(description, referenceYear).rows.length >= 3
+}
+
+/* ---------------------------------------------------------------------------
+ * Escrita: sempre uma linha por vez, o resto da descricao fica intocado.
+ * ------------------------------------------------------------------------ */
+
+function editLine(description: string, line: number, edit: (parts: Parts) => Parts | null): string {
+  const lines = description.replace(/\r\n?/g, '\n').split('\n')
+  if (line < 0 || line >= lines.length) return description
+  const parts = partsOf(lines[line])
+  if (parts === null) return description
+
+  const next = edit(parts)
+  if (next === null) lines.splice(line, 1)
+  else lines[line] = renderParts(next)
+  return lines.join('\n')
+}
+
+export function setRowName(description: string, line: number, name: string): string {
+  // dois-pontos no nome partiria a linha em outro lugar na proxima leitura
+  const clean = name.replace(/[:\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)
+  if (clean === '') return description
+  return editLine(description, line, (parts) => ({ ...parts, name: clean }))
+}
+
+export function setRowDetail(description: string, line: number, detail: string): string {
+  const clean = detail.replace(/\s*\n\s*/g, ' ').trim()
+  return editLine(description, line, (parts) => ({ ...parts, detail: clean }))
+}
+
+export function setRowSituation(description: string, line: number, situation: Situation): string {
+  return editLine(description, line, (parts) => ({ ...parts, marker: situation }))
+}
+
+export function removeRow(description: string, line: number): string {
+  return editLine(description, line, () => null)
+}
+
+/** Acrescenta uma linha no fim e devolve em que linha ela ficou, para focar. */
+export function addRow(description: string, name: string): { description: string; line: number } {
+  const lines = description.replace(/\r\n?/g, '\n').split('\n')
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop()
+  lines.push(`${name}:`)
+  return { description: lines.join('\n'), line: lines.length - 1 }
 }

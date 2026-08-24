@@ -193,6 +193,9 @@ export function App() {
             card={tableCard}
             onBack={() => setTableCardId(null)}
             onEditDescription={() => setPanel({ mode: 'edit', cardId: tableCard.id })}
+            onChangeDescription={(description) =>
+              dispatch({ type: 'card/update', id: tableCard.id, patch: { description } })
+            }
           />
         ) : (
           <>

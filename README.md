@@ -95,7 +95,9 @@ Serve para acompanhar muitos interlocutores ao mesmo tempo: com 20 fornecedores 
 
 Clicar no cabeçalho ordena; clicar de novo volta à ordem do texto. Ordenar por **Quando** traz as reuniões mais próximas para o topo.
 
-**A tabela é uma vista, não um formato.** Nada é gravado separado: a descrição continua sendo a única fonte de verdade, e você escreve prosa como sempre. O que a tabela faz é ler o que já está escrito:
+A tabela é **editável**: clique em qualquer célula para mudar o nome ou o detalhe (Enter grava, Esc desfaz), escolha a situação na lista, use **+ Linha** para acrescentar um assunto e o **×** no fim da linha para apagar.
+
+**Mas ela não é um formato novo.** Cada edição é gravada de volta na própria descrição do card — não existe campo novo no `board.json`, não existe dado duplicado, e quem abre o card continua vendo a prosa de sempre. O que a tabela faz é ler o que está escrito e reescrever a linha correspondente:
 
 | Coluna | De onde vem |
 | --- | --- |
@@ -105,9 +107,11 @@ Clicar no cabeçalho ordena; clicar de novo volta à ordem do texto. Ordenar por
 | Contato | canais reconhecidos: WhatsApp, Instagram, site, telefone, e-mail, link |
 | Quando | `24/08` e `10h`, com cuidado para não confundir telefone (`0800 006 9500`) com data |
 
-Linha sem dois-pontos não é assunto: vira nota, listada abaixo da tabela em vez de sumir. Nome com mais de 40 caracteres é tratado como frase, não como nome.
+Escolher na lista uma situação **diferente** da que o texto sugere deixa uma marca visível no fim da linha — `Akropoli: Reunião 24/08 14h [aguardando]` —, porque a reunião já aconteceu e agora é só espera. Escolher a mesma que o texto sugere apaga a marca. Nada some da descrição sem aparecer nela.
 
-Como nada é convertido, desistir custa zero: o botão deixa de ser usado e a descrição está intacta.
+Linha sem dois-pontos não é assunto: vira nota, listada abaixo da tabela em vez de sumir. Nome com mais de 40 caracteres é tratado como frase, não como nome; dois-pontos digitados dentro de um nome viram espaço, senão a linha se partiria em outro lugar na próxima leitura.
+
+Como não há conversão nem migração, desistir custa zero: o botão deixa de ser usado e a descrição continua sendo texto.
 
 ### Vista "Pista"
 
@@ -212,10 +216,10 @@ src/
     boardReducer.ts     ações puras; cada ação devolve sua mensagem de commit
     useBoard.ts         reducer + debounce de 2s + estado de sync + conflito
   components/           Board, ColumnView, CardTile, CardPanel, ArchiveView…
-    CardTable.tsx       a descricao de um card lida como tabela
+    CardTable.tsx       a descricao de um card lida e editada como tabela
     TrackView.tsx       vista "Pista": o board como volta de kart
   lib/markdown.tsx      renderizador próprio, sem innerHTML
-  lib/rows.ts           lê a descrição como linhas de tabela (só leitura)
+  lib/rows.ts           lê e reescreve a descrição como linhas de tabela
 ```
 
 Dependências de runtime: só `react` e `react-dom`. O markdown é renderizado por código próprio produzindo elementos React (nunca `innerHTML`), com whitelist de protocolo nos links — num app que guarda token no navegador, um XSS na descrição do card seria roubo de token.
