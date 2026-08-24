@@ -87,6 +87,28 @@ Quando o token expirar, o app mostra um aviso vermelho com botão para a tela de
 - **WIP limit:** o contador da coluna fica vermelho quando passa do limite (menu ⋯ da coluna para definir).
 - **Arquivar em vez de excluir:** o card sai do board e continua consultável na aba **Arquivo**, de onde pode voltar para qualquer coluna.
 
+### Ver a descrição como tabela
+
+Card cuja descrição é uma lista de assuntos — um por linha, no formato `Nome: situação` — ganha o botão **Ver como tabela** embaixo do campo de descrição. Ele abre a mesma descrição em tela cheia, uma linha por assunto, com colunas **Fornecedor · Situação · Detalhe · Contato · Quando**.
+
+Serve para acompanhar muitos interlocutores ao mesmo tempo: com 20 fornecedores num parágrafo não há como saber de relance quem está aguardando e quem tem reunião marcada. Numa coluna, dá.
+
+Clicar no cabeçalho ordena; clicar de novo volta à ordem do texto. Ordenar por **Quando** traz as reuniões mais próximas para o topo.
+
+**A tabela é uma vista, não um formato.** Nada é gravado separado: a descrição continua sendo a única fonte de verdade, e você escreve prosa como sempre. O que a tabela faz é ler o que já está escrito:
+
+| Coluna | De onde vem |
+| --- | --- |
+| Fornecedor | o que vem antes dos dois-pontos |
+| Situação | palavras no texto: "reunião" → reunião marcada; "aguardando", "em contato", "chamei", "retorno" → aguardando; nada depois dos dois-pontos → sem contato; o resto → a fazer |
+| Detalhe | o texto depois dos dois-pontos, sem alteração |
+| Contato | canais reconhecidos: WhatsApp, Instagram, site, telefone, e-mail, link |
+| Quando | `24/08` e `10h`, com cuidado para não confundir telefone (`0800 006 9500`) com data |
+
+Linha sem dois-pontos não é assunto: vira nota, listada abaixo da tabela em vez de sumir. Nome com mais de 40 caracteres é tratado como frase, não como nome.
+
+Como nada é convertido, desistir custa zero: o botão deixa de ser usado e a descrição está intacta.
+
 ### Vista "Pista"
 
 Aba ao lado de **Board**: o mesmo board desenhado como uma volta de kart, com traçado inspirado em Interlagos (S do Senna, Curva do Sol, reta oposta, ferradura, junção, subida dos boxes).
@@ -190,8 +212,10 @@ src/
     boardReducer.ts     ações puras; cada ação devolve sua mensagem de commit
     useBoard.ts         reducer + debounce de 2s + estado de sync + conflito
   components/           Board, ColumnView, CardTile, CardPanel, ArchiveView…
+    CardTable.tsx       a descricao de um card lida como tabela
     TrackView.tsx       vista "Pista": o board como volta de kart
   lib/markdown.tsx      renderizador próprio, sem innerHTML
+  lib/rows.ts           lê a descrição como linhas de tabela (só leitura)
 ```
 
 Dependências de runtime: só `react` e `react-dom`. O markdown é renderizado por código próprio produzindo elementos React (nunca `innerHTML`), com whitelist de protocolo nos links — num app que guarda token no navegador, um XSS na descrição do card seria roubo de token.

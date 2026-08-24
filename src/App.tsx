@@ -7,6 +7,7 @@ import { Toolbar, type View } from './components/Toolbar'
 import { Board } from './components/Board'
 import { TrackView } from './components/TrackView'
 import { CardPanel } from './components/CardPanel'
+import { CardTable } from './components/CardTable'
 import { ArchiveView } from './components/ArchiveView'
 import { SettingsView } from './components/SettingsView'
 import { ConflictBanner, ErrorBanner, FileMissingBanner, PermissionBanner } from './components/Banners'
@@ -35,6 +36,8 @@ export function App() {
   const [tag, setTag] = useState('')
   const [priority, setPriority] = useState<Priority | ''>('')
   const [panel, setPanel] = useState<PanelState>(null)
+  /** card cuja descricao esta aberta como tabela, ocupando a area principal */
+  const [tableCardId, setTableCardId] = useState<string | null>(null)
   const [dismissedError, setDismissedError] = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -77,6 +80,7 @@ export function App() {
     onEscape: () => {
       if (panel) setPanel(null)
       else if (query !== '') setQuery('')
+      else if (tableCardId !== null) setTableCardId(null)
     },
   })
 
@@ -113,6 +117,8 @@ export function App() {
   const editing = panel?.mode === 'edit' ? (board.cards.find((c) => c.id === panel.cardId) ?? null) : null
   // card arquivado/excluido enquanto o painel estava aberto: o painel simplesmente sai
   const openPanel = panel === null || (panel.mode === 'edit' && editing === null) ? null : panel
+
+  const tableCard = tableCardId === null ? null : (board.cards.find((c) => c.id === tableCardId) ?? null)
 
   const visible = board.cards.length - hiddenIds.size
   const showError = api.error !== null && api.error !== dismissedError && api.status !== 'conflict'
@@ -182,6 +188,14 @@ export function App() {
       )}
 
       <main className="min-h-0 flex-1">
+        {tableCard ? (
+          <CardTable
+            card={tableCard}
+            onBack={() => setTableCardId(null)}
+            onEditDescription={() => setPanel({ mode: 'edit', cardId: tableCard.id })}
+          />
+        ) : (
+          <>
         {view === 'board' && (
           <Board
             board={board}
@@ -203,6 +217,8 @@ export function App() {
         {view === 'archive' && <ArchiveView board={board} dispatch={dispatch} />}
         {view === 'settings' && (
           <SettingsView config={api.config} onSave={api.saveConfig} onExport={() => downloadJson(board)} />
+        )}
+          </>
         )}
       </main>
 
@@ -231,6 +247,11 @@ export function App() {
           onMove={(columnId) => {
             if (editing)
               dispatch({ type: 'card/move', id: editing.id, toColumnId: columnId, toIndex: Number.MAX_SAFE_INTEGER })
+          }}
+          onOpenAsTable={() => {
+            if (!editing) return
+            setTableCardId(editing.id)
+            setPanel(null)
           }}
         />
       )}
