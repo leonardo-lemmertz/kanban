@@ -3,6 +3,7 @@ import {
   type Board,
   type Card,
   type ChecklistItem,
+  type Lane,
   type Column,
   type ItemState,
   type Priority,
@@ -31,7 +32,29 @@ function asTags(value: unknown): string[] {
  * Itens de checklist chegaram no schema 2. Board gravado antes disso simplesmente
  * nao tem o campo, e o card abre com a lista vazia -- nada a converter.
  */
-function asChecklist(raw: unknown): ChecklistItem[] {
+/**
+ * Raias chegaram no schema 3. Board anterior nao tem o campo, e o card abre
+ * como lista de itens -- que continua sendo o modo padrao.
+ */
+function asLanes(raw: unknown): Lane[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((entry): Lane | null => {
+      if (typeof entry !== 'object' || entry === null) return null
+      const o = entry as Record<string, unknown>
+      const name = asString(o.name).trim()
+      if (name === '') return null
+      const kind = asString(o.kind)
+      return {
+        id: asString(o.id) || newId('lane'),
+        name,
+        kind: ITEM_STATE_SET.has(kind as ItemState) ? (kind as ItemState) : 'todo',
+      }
+    })
+    .filter((lane): lane is Lane => lane !== null)
+}
+
+function asChecklist(raw: unknown, laneIds: Set<string>): ChecklistItem[] {
   if (!Array.isArray(raw)) return []
   const now = new Date().toISOString()
   return raw
@@ -44,6 +67,7 @@ function asChecklist(raw: unknown): ChecklistItem[] {
       const dueDate = asString(o.dueDate).trim()
       const time = asString(o.time).trim()
       const waitingSince = asString(o.waitingSince).trim()
+      const laneId = asString(o.laneId).trim()
       return {
         id: asString(o.id) || newId('item'),
         text,
@@ -52,6 +76,8 @@ function asChecklist(raw: unknown): ChecklistItem[] {
         ...(HHMM.test(time) ? { time } : {}),
         // so faz sentido guardar "espera desde" enquanto o item esta aguardando
         ...(state === 'waiting' ? { waitingSince: waitingSince || now } : {}),
+        // raia apagada devolve o item para a lista, em vez de apontar para o vazio
+        ...(laneIds.has(laneId) ? { laneId } : {}),
         updatedAt: asString(o.updatedAt, now),
       }
     })
@@ -73,6 +99,7 @@ function asCard(raw: unknown, columnIds: Set<string>, fallbackColumn: string, in
   const title = asString(o.title).trim()
   if (title === '') return null
   const now = new Date().toISOString()
+  const lanes = asLanes(o.lanes)
   const columnId = asString(o.columnId)
   const dueDate = asString(o.dueDate).trim()
   const archivedAt = asString(o.archivedAt).trim()
@@ -87,7 +114,8 @@ function asCard(raw: unknown, columnIds: Set<string>, fallbackColumn: string, in
     createdAt: asString(o.createdAt, now),
     updatedAt: asString(o.updatedAt, now),
     order: typeof o.order === 'number' ? o.order : (index + 1) * 100,
-    checklist: asChecklist(o.checklist),
+    lanes,
+    checklist: asChecklist(o.checklist, new Set(lanes.map((l) => l.id))),
     ...(archivedAt !== '' ? { archivedAt } : {}),
   }
 }

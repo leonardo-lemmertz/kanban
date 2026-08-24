@@ -5,6 +5,7 @@ import { migrate } from './storage'
 import { useHotkeys } from './hooks/useHotkeys'
 import { Toolbar, type View } from './components/Toolbar'
 import { Board } from './components/Board'
+import { CardBoard } from './components/CardBoard'
 import { TrackView } from './components/TrackView'
 import { CardPanel } from './components/CardPanel'
 import { ArchiveView } from './components/ArchiveView'
@@ -35,6 +36,8 @@ export function App() {
   const [tag, setTag] = useState('')
   const [priority, setPriority] = useState<Priority | ''>('')
   const [panel, setPanel] = useState<PanelState>(null)
+  /** card cujo quadro interno esta aberto, ocupando a area principal */
+  const [openBoardId, setOpenBoardId] = useState<string | null>(null)
   const [dismissedError, setDismissedError] = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -78,6 +81,7 @@ export function App() {
     onEscape: () => {
       if (panel) setPanel(null)
       else if (query !== '') setQuery('')
+      else if (openBoardId !== null) setOpenBoardId(null)
     },
   })
 
@@ -114,6 +118,8 @@ export function App() {
   const editing = panel?.mode === 'edit' ? (board.cards.find((c) => c.id === panel.cardId) ?? null) : null
   // card arquivado/excluido enquanto o painel estava aberto: o painel simplesmente sai
   const openPanel = panel === null || (panel.mode === 'edit' && editing === null) ? null : panel
+
+  const boardCard = openBoardId === null ? null : (board.cards.find((c) => c.id === openBoardId) ?? null)
 
   const visible = board.cards.length - hiddenIds.size
   const showError = api.error !== null && api.error !== dismissedError && api.status !== 'conflict'
@@ -183,6 +189,16 @@ export function App() {
       )}
 
       <main className="min-h-0 flex-1">
+        {boardCard ? (
+          <CardBoard
+            card={boardCard}
+            dispatch={dispatch}
+            onBack={() => setOpenBoardId(null)}
+            onOpenItem={() => setPanel({ mode: 'edit', cardId: boardCard.id })}
+            selectedItemId={null}
+          />
+        ) : (
+          <>
         {view === 'board' && (
           <Board
             board={board}
@@ -204,6 +220,8 @@ export function App() {
         {view === 'archive' && <ArchiveView board={board} dispatch={dispatch} />}
         {view === 'settings' && (
           <SettingsView config={api.config} onSave={api.saveConfig} onExport={() => downloadJson(board)} />
+        )}
+          </>
         )}
       </main>
 
@@ -239,6 +257,12 @@ export function App() {
           onItemMove={(itemId, delta) => editing && dispatch({ type: 'item/move', cardId: editing.id, itemId, delta })}
           onItemDelete={(itemId) => editing && dispatch({ type: 'item/delete', cardId: editing.id, itemId })}
           onItemsFromDescription={() => editing && dispatch({ type: 'item/fromDescription', cardId: editing.id })}
+          onOpenAsBoard={() => {
+            if (!editing) return
+            if (editing.lanes.length === 0) dispatch({ type: 'lanes/create', cardId: editing.id })
+            setOpenBoardId(editing.id)
+            setPanel(null)
+          }}
         />
       )}
     </div>

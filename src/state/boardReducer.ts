@@ -5,10 +5,17 @@ import {
   type ChecklistItem,
   type Column,
   type ItemState,
+  type Lane,
   type Priority,
 } from '../types'
 import { newId } from '../lib/ids'
-import { newChecklistItem, parseDescriptionToChecklist } from '../lib/checklist'
+import {
+  defaultLanes,
+  itemsInLane,
+  moveItemToLane,
+  newChecklistItem,
+  parseDescriptionToChecklist,
+} from '../lib/checklist'
 
 export interface NewCardInput {
   columnId: string
@@ -35,12 +42,21 @@ export type Action =
   | { type: 'column/wip'; id: string; wipLimit?: number }
   | { type: 'column/move'; id: string; toIndex: number }
   | { type: 'column/delete'; id: string; moveCardsTo?: string }
-  | { type: 'item/add'; cardId: string; text: string }
+  | { type: 'item/add'; cardId: string; text: string; laneId?: string }
   | { type: 'item/update'; cardId: string; itemId: string; patch: ItemPatch }
   | { type: 'item/state'; cardId: string; itemId: string; state: ItemState }
   | { type: 'item/move'; cardId: string; itemId: string; delta: number }
   | { type: 'item/delete'; cardId: string; itemId: string }
   | { type: 'item/fromDescription'; cardId: string }
+  | { type: 'item/lane'; cardId: string; itemId: string; laneId: string; toIndex: number }
+  | { type: 'lanes/create'; cardId: string }
+  | { type: 'lanes/clear'; cardId: string }
+  | { type: 'lanes/collectLoose'; cardId: string }
+  | { type: 'lane/add'; cardId: string; name: string; kind?: ItemState }
+  | { type: 'lane/rename'; cardId: string; laneId: string; name: string }
+  | { type: 'lane/kind'; cardId: string; laneId: string; kind: ItemState }
+  | { type: 'lane/move'; cardId: string; laneId: string; toIndex: number }
+  | { type: 'lane/delete'; cardId: string; laneId: string }
   | { type: 'board/replace'; board: Board; reason: string }
   | { type: 'board/archiveColumn'; columnId: string }
 
@@ -100,6 +116,25 @@ function withChecklist(
   }
 }
 
+/** Reescreve as raias de um card (e o checklist junto, quando preciso). */
+function withLanes(
+  board: Board,
+  cardId: string,
+  now: string,
+  change: (card: Card) => { lanes: Lane[]; checklist?: ChecklistItem[] } | null,
+): Board | null {
+  const card = board.cards.find((c) => c.id === cardId)
+  if (!card) return null
+  const next = change(card)
+  if (next === null) return null
+  return {
+    ...board,
+    cards: board.cards.map((c) =>
+      c.id === cardId ? { ...c, lanes: next.lanes, checklist: next.checklist ?? c.checklist, updatedAt: now } : c,
+    ),
+  }
+}
+
 export function applyAction(board: Board, action: Action): ActionResult {
   const now = new Date().toISOString()
 
@@ -119,6 +154,7 @@ export function applyAction(board: Board, action: Action): ActionResult {
         ...(action.input.dueDate ? { dueDate: action.input.dueDate } : {}),
         createdAt: now,
         updatedAt: now,
+        lanes: [],
         checklist: [],
         order: action.atTop
           ? (siblings[0]?.order ?? STEP * 2) - STEP
@@ -329,9 +365,16 @@ export function applyAction(board: Board, action: Action): ActionResult {
       if (text === '') return noop(board)
       const card = board.cards.find((c) => c.id === action.cardId)
       if (!card) return noop(board)
-      const next = withChecklist(board, action.cardId, now, (items) => [...items, newChecklistItem(text)])
+      // criado direto na raia quando vem do quadro interno; solto quando vem da lista
+      const lane = action.laneId === undefined ? undefined : card.lanes.find((l) => l.id === action.laneId)
+      const item = newChecklistItem(text, lane?.kind ?? 'todo')
+      if (lane) item.laneId = lane.id
+      const next = withChecklist(board, action.cardId, now, (items) => [...items, item])
       if (!next) return noop(board)
-      return { board: stamp(next), message: `chore: adiciona "${quote(text)}" em "${quote(card.title)}"` }
+      return {
+        board: stamp(next),
+        message: `chore: adiciona "${quote(text)}" em "${quote(card.title)}"${lane ? ` (${quote(lane.name)})` : ''}`,
+      }
     }
 
     case 'item/update': {
@@ -412,6 +455,172 @@ export function applyAction(board: Board, action: Action): ActionResult {
       return {
         board: stamp(next),
         message: `feat: converte descrição de "${quote(card.title)}" em ${parsed.items.length} item(ns)`,
+      }
+    }
+
+    case 'lanes/create': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      if (!card || card.lanes.length > 0) return noop(board)
+      const lanes: Lane[] = defaultLanes().map((lane) => ({ ...lane, id: newId('lane') }))
+      // cada cartao cai na raia do tipo que o item ja tinha
+      const byKind = new Map(lanes.map((lane) => [lane.kind, lane.id]))
+      const checklist = card.checklist.map((item) => ({ ...item, laneId: byKind.get(item.state) }))
+      const next = withLanes(board, action.cardId, now, () => ({ lanes, checklist }))
+      if (!next) return noop(board)
+      return {
+        board: stamp(next),
+        message: `feat: transforma "${quote(card.title)}" em quadro com ${card.checklist.length} cartao(oes)`,
+      }
+    }
+
+    case 'lanes/clear': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      if (!card || card.lanes.length === 0) return noop(board)
+      const checklist = card.checklist.map(({ laneId: _drop, ...item }) => item)
+      const next = withLanes(board, action.cardId, now, () => ({ lanes: [], checklist }))
+      if (!next) return noop(board)
+      return { board: stamp(next), message: `chore: volta "${quote(card.title)}" para lista de itens` }
+    }
+
+    case 'lanes/collectLoose': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      const lane = card?.lanes[0]
+      if (!card || !lane) return noop(board)
+      const loose = card.checklist.filter((item) => item.laneId === undefined)
+      if (loose.length === 0) return noop(board)
+      const next = withLanes(board, action.cardId, now, (c) => ({
+        lanes: c.lanes,
+        checklist: c.checklist.map((item) => {
+          if (item.laneId !== undefined) return item
+          const updated: ChecklistItem = { ...item, laneId: lane.id, state: lane.kind, updatedAt: now }
+          if (lane.kind === 'waiting') updated.waitingSince = item.waitingSince ?? now
+          else delete updated.waitingSince
+          return updated
+        }),
+      }))
+      if (!next) return noop(board)
+      return {
+        board: stamp(next),
+        message: `chore: move ${loose.length} cartao(oes) solto(s) para ${quote(lane.name)} em "${quote(card.title)}"`,
+      }
+    }
+
+    case 'lane/add': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      const name = action.name.trim()
+      if (!card || name === '') return noop(board)
+      const lane: Lane = { id: newId('lane'), name, kind: action.kind ?? 'todo' }
+      const next = withLanes(board, action.cardId, now, (c) => ({ lanes: [...c.lanes, lane] }))
+      if (!next) return noop(board)
+      return { board: stamp(next), message: `feat: cria raia "${quote(name)}" em "${quote(card.title)}"` }
+    }
+
+    case 'lane/rename': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      const lane = card?.lanes.find((l) => l.id === action.laneId)
+      const name = action.name.trim()
+      if (!card || !lane || name === '' || name === lane.name) return noop(board)
+      const next = withLanes(board, action.cardId, now, (c) => ({
+        lanes: c.lanes.map((l) => (l.id === action.laneId ? { ...l, name } : l)),
+      }))
+      if (!next) return noop(board)
+      return {
+        board: stamp(next),
+        message: `chore: renomeia raia "${quote(lane.name)}" para "${quote(name)}" em "${quote(card.title)}"`,
+      }
+    }
+
+    case 'lane/kind': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      const lane = card?.lanes.find((l) => l.id === action.laneId)
+      if (!card || !lane || lane.kind === action.kind) return noop(board)
+      const next = withLanes(board, action.cardId, now, (c) => ({
+        lanes: c.lanes.map((l) => (l.id === action.laneId ? { ...l, kind: action.kind } : l)),
+        // mudar o tipo da raia arrasta o estado dos cartoes que estao nela
+        checklist: c.checklist.map((item) => {
+          if (item.laneId !== action.laneId) return item
+          const updated: ChecklistItem = { ...item, state: action.kind, updatedAt: now }
+          if (action.kind === 'waiting') updated.waitingSince = item.waitingSince ?? now
+          else delete updated.waitingSince
+          return updated
+        }),
+      }))
+      if (!next) return noop(board)
+      return {
+        board: stamp(next),
+        message: `chore: raia "${quote(lane.name)}" de "${quote(card.title)}" passa a contar como ${action.kind}`,
+      }
+    }
+
+    case 'lane/move': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      if (!card) return noop(board)
+      const from = card.lanes.findIndex((l) => l.id === action.laneId)
+      const to = Math.max(0, Math.min(action.toIndex, card.lanes.length - 1))
+      if (from === -1 || from === to) return noop(board)
+      const next = withLanes(board, action.cardId, now, (c) => {
+        const lanes = [...c.lanes]
+        const [lane] = lanes.splice(from, 1)
+        lanes.splice(to, 0, lane)
+        return { lanes }
+      })
+      if (!next) return noop(board)
+      return {
+        board: stamp(next),
+        message: `chore: reordena raia "${quote(card.lanes[from].name)}" em "${quote(card.title)}"`,
+      }
+    }
+
+    case 'lane/delete': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      const lane = card?.lanes.find((l) => l.id === action.laneId)
+      if (!card || !lane) return noop(board)
+      const remaining = card.lanes.filter((l) => l.id !== action.laneId)
+      const affected = itemsInLane(card.checklist, action.laneId).length
+      const fallback = remaining[0]
+      const next = withLanes(board, action.cardId, now, (c) => ({
+        lanes: remaining,
+        // os cartoes nao somem: vao para a primeira raia, ou voltam a ser itens soltos
+        checklist: c.checklist.map((item) => {
+          if (item.laneId !== action.laneId) return item
+          if (!fallback) {
+            const { laneId: _drop, ...loose } = item
+            return { ...loose, updatedAt: now }
+          }
+          const updated: ChecklistItem = { ...item, laneId: fallback.id, state: fallback.kind, updatedAt: now }
+          if (fallback.kind === 'waiting') updated.waitingSince = item.waitingSince ?? now
+          else delete updated.waitingSince
+          return updated
+        }),
+      }))
+      if (!next) return noop(board)
+      return {
+        board: stamp(next),
+        message: `chore: exclui raia "${quote(lane.name)}" de "${quote(card.title)}"${
+          affected > 0 ? `, ${affected} cartao(oes) para ${fallback ? quote(fallback.name) : 'a lista'}` : ''
+        }`,
+      }
+    }
+
+    case 'item/lane': {
+      const card = board.cards.find((c) => c.id === action.cardId)
+      const lane = card?.lanes.find((l) => l.id === action.laneId)
+      const item = card?.checklist.find((i) => i.id === action.itemId)
+      if (!card || !lane || !item) return noop(board)
+
+      const before = itemsInLane(card.checklist, action.laneId).findIndex((i) => i.id === action.itemId)
+      if (item.laneId === action.laneId && before === action.toIndex) return noop(board)
+
+      const checklist = moveItemToLane(card.checklist, action.itemId, lane, action.toIndex, now)
+      if (checklist === null) return noop(board)
+      const next = withLanes(board, action.cardId, now, (c) => ({ lanes: c.lanes, checklist }))
+      if (!next) return noop(board)
+      return {
+        board: stamp(next),
+        message:
+          item.laneId === action.laneId
+            ? `chore: reordena "${quote(item.text)}" em ${quote(lane.name)}`
+            : `chore: move "${quote(item.text)}" para ${quote(lane.name)} em "${quote(card.title)}"`,
       }
     }
 

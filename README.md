@@ -107,6 +107,27 @@ Card cujo texto já é uma lista (uma linha por assunto) ganha o botão **Conver
 
 É um chute, não uma promessa: revise depois. Por isso a conversão **não apaga a descrição original**, e o botão some assim que a lista tem itens, para não duplicar tudo num segundo clique.
 
+### Quadro dentro do card
+
+Card que é uma frente inteira — o "Extratos", com 20 fornecedores em estágios diferentes — vira um **quadro próprio**, com as etapas daquele assunto. As etapas do Extratos não são as etapas do "Comprovantes Bancários", e é por isso que elas moram no card e não no board.
+
+No painel do card, o botão **Transformar em quadro** cria três raias (A fazer, Aguardando, Feito) e distribui os itens conforme o estado que cada um já tinha. Depois disso o botão passa a ser **Abrir quadro**.
+
+O quadro ocupa a área principal, não o painel lateral: três ou quatro raias não cabem em 24rem, e arrastar cartão exige espaço. `← Board` volta, e `Esc` também.
+
+Dentro dele:
+
+- **Arrastar cartão** entre raias e reordenar dentro da raia. O menu **⋯** do cartão faz o mesmo sem arrastar.
+- **Raias próprias**: criar, renomear (duplo clique no nome), reordenar e excluir. Excluir uma raia **não apaga cartões** — eles vão para a primeira raia.
+- **`+ cartão`** cria direto na raia, já com o estado dela.
+- **Voltar a lista** desfaz as raias e devolve o card ao modo lista, preservando cartões e estados.
+
+#### Por que a raia tem "tipo"
+
+Cada raia é amarrada a um dos três estados de item — a fazer, aguardando ou feito — escolhido no menu **⋯** da raia. É isso que faz o resto do app continuar funcionando depois de o card virar quadro: mover um cartão para uma raia de tipo "aguardando" é o mesmo que marcá-lo como aguardando, então o contador de dias de espera, o `3/22` no board e a data mais próxima entre os itens seguem valendo.
+
+Assim você pode ter uma raia "Reunião marcada" que conta como "a fazer" e uma "Cobrado, sem resposta" que conta como "aguardando" — nomes seus, semântica que o app entende.
+
 ### Vista "Pista"
 
 Aba ao lado de **Board**: o mesmo board desenhado como uma volta de kart, com traçado inspirado em Interlagos (S do Senna, Curva do Sol, reta oposta, ferradura, junção, subida dos boxes).
@@ -199,7 +220,7 @@ O push na `main` dispara `.github/workflows/deploy.yml`, que faz o build e publi
 
 ```
 src/
-  types.ts              Board, Column, Card, ChecklistItem, SCHEMA_VERSION
+  types.ts              Board, Column, Card, ChecklistItem, Lane, SCHEMA_VERSION
   lib/checklist.ts      estatisticas, contagem de espera e conversao de descricao
   storage/              persistência: uma interface, três adaptadores
     localAdapter.ts       localStorage (padrão)
@@ -211,10 +232,11 @@ src/
     boardReducer.ts     ações puras; cada ação devolve sua mensagem de commit
     useBoard.ts         reducer + debounce de 2s + estado de sync + conflito
   components/           Board, ColumnView, CardTile, CardPanel, ArchiveView…
+    CardBoard.tsx       quadro interno de um card (raias)
     TrackView.tsx       vista "Pista": o board como volta de kart
   lib/markdown.tsx      renderizador próprio, sem innerHTML
 ```
 
 Dependências de runtime: só `react` e `react-dom`. O markdown é renderizado por código próprio produzindo elementos React (nunca `innerHTML`), com whitelist de protocolo nos links — num app que guarda token no navegador, um XSS na descrição do card seria roubo de token.
 
-Para mudar o formato do `board.json`, incremente `SCHEMA_VERSION` em `src/types.ts` e trate a versão antiga em `src/storage/migrate.ts`. O schema está na **versão 2**, que acrescentou `checklist` ao card; board gravado na versão 1 abre normalmente, com a lista vazia.
+Para mudar o formato do `board.json`, incremente `SCHEMA_VERSION` em `src/types.ts` e trate a versão antiga em `src/storage/migrate.ts`. O schema está na **versão 3**: a 2 acrescentou `checklist` ao card, a 3 acrescentou `lanes`. Board gravado numa versão anterior abre normalmente — sem itens, ou com itens e sem raias.
