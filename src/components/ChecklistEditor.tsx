@@ -103,14 +103,7 @@ export function ChecklistEditor(props: ChecklistEditorProps) {
       <ul className="space-y-0.5">
         {props.items.map((item, index) => {
           const due = dueState(item.dueDate)
-          /*
-           * Selo de espera so a partir de 1 dia. Item que entrou em espera hoje
-           * nao informa nada -- e na conversao de uma descricao todos entram no
-           * mesmo dia, o que enchia a lista de "hoje" identicos e mentirosos:
-           * o fornecedor esperava havia semanas, a marcacao e que era nova.
-           */
-          const days = item.state === 'waiting' && item.waitingSince ? daysSince(item.waitingSince) : null
-          const waited = days !== null && days > 0 ? days : null
+          const waited = item.state === 'waiting' && item.waitingSince ? daysSince(item.waitingSince) : null
           return (
             <li key={item.id} className="rounded border border-transparent hover:border-zinc-200 dark:hover:border-zinc-800">
               <div className="flex items-start gap-1.5 px-1 py-0.5">
@@ -127,8 +120,7 @@ export function ChecklistEditor(props: ChecklistEditorProps) {
                 <button
                   type="button"
                   onClick={() => openEditor(item)}
-                  title={item.text}
-                  className={`min-w-0 flex-1 break-words text-left text-[12px] leading-snug line-clamp-2 ${
+                  className={`min-w-0 flex-1 break-words text-left text-[12px] leading-snug ${
                     item.state === 'done' ? 'text-zinc-400 line-through dark:text-zinc-600' : ''
                   }`}
                 >
@@ -140,7 +132,7 @@ export function ChecklistEditor(props: ChecklistEditorProps) {
                     className="shrink-0 rounded-sm border border-amber-400 px-1 text-[10px] leading-4 text-amber-700 dark:border-amber-700 dark:text-amber-400"
                     title="Tempo desde que entrou em aguardando"
                   >
-                    {waited}d
+                    {waited === 0 ? 'hoje' : `${waited}d`}
                   </span>
                 )}
 
