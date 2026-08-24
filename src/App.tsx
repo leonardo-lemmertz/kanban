@@ -119,7 +119,14 @@ export function App() {
   const showError = api.error !== null && api.error !== dismissedError && api.status !== 'conflict'
 
   return (
-    <div className="flex h-dvh flex-col">
+    /*
+     * O painel do card e fixo na direita. Sem reservar essa faixa, ele cobre a
+     * ponta direita da barra de cima (indicador de sync, Exportar, + Card) e dos
+     * avisos -- foi assim que o botao "Autorizar" ficou invisivel enquanto o
+     * board passava dias sem gravar no arquivo. No celular o painel ocupa a tela
+     * inteira de proposito, entao a reserva vale so a partir de sm.
+     */
+    <div className={`flex h-dvh flex-col ${openPanel ? 'sm:pr-96' : ''}`}>
       <Toolbar
         view={view}
         onView={setView}
