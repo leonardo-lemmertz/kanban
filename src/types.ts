@@ -1,6 +1,6 @@
 /** Versao do schema gravado em disco. Incrementar ao mudar o formato e
  *  adicionar o passo correspondente em storage/migrate.ts. */
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 2
 
 export type Priority = 'baixa' | 'media' | 'alta' | 'urgente'
 
@@ -36,25 +36,6 @@ export const ITEM_STATE_LABEL: Record<ItemState, string> = {
   done: 'Feito',
 }
 
-/**
- * Raia do quadro interno de um card.
- *
- * Card pequeno vive bem como lista de itens. Card que e uma frente inteira --
- * o "Extratos", com 20 fornecedores em estagios diferentes -- vira um quadro
- * proprio, com as etapas daquele assunto especifico ("reuniao marcada",
- * "testando"), que nao sao as etapas do board principal.
- *
- * `kind` amarra a raia a um dos tres estados de item. E o que faz o contador de
- * espera e o progresso continuarem valendo depois de virar quadro: mover um
- * cartao para uma raia de tipo "aguardando" e o mesmo que marcar o item como
- * aguardando.
- */
-export interface Lane {
-  id: string
-  name: string
-  kind: ItemState
-}
-
 export interface ChecklistItem {
   id: string
   text: string
@@ -65,8 +46,6 @@ export interface ChecklistItem {
   time?: string
   /** quando entrou em "aguardando"; e o que permite contar ha quantos dias espera */
   waitingSince?: string
-  /** raia do quadro interno; ausente enquanto o card e uma lista simples */
-  laneId?: string
   updatedAt: string
 }
 
@@ -81,8 +60,6 @@ export interface Card {
   createdAt: string
   updatedAt: string
   order: number
-  /** raias do quadro interno; vazio = o card e uma lista de itens */
-  lanes: Lane[]
   /** sub-tarefas do card; vazio na maioria dos cards */
   checklist: ChecklistItem[]
   /** preenchido apenas em Board.archived */

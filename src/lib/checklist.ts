@@ -1,4 +1,4 @@
-import type { ChecklistItem, ItemState, Lane } from '../types'
+import type { ChecklistItem, ItemState } from '../types'
 import { newId } from './ids'
 import { todayISO } from './dates'
 
@@ -48,67 +48,6 @@ export function newChecklistItem(text: string, state: ItemState = 'todo'): Check
     ...(state === 'waiting' ? { waitingSince: now } : {}),
     updatedAt: now,
   }
-}
-
-/* --- raias do quadro interno --------------------------------------------- */
-
-/** Itens de uma raia, na ordem em que aparecem no checklist do card. */
-export function itemsInLane(items: ChecklistItem[], laneId: string): ChecklistItem[] {
-  return items.filter((item) => item.laneId === laneId)
-}
-
-/** Itens que ainda nao estao em raia nenhuma. */
-export function looseItems(items: ChecklistItem[]): ChecklistItem[] {
-  return items.filter((item) => item.laneId === undefined)
-}
-
-/**
- * Move um item para uma raia, na posicao pedida.
- *
- * A ordem dos itens e a ordem do proprio array do card -- nao existe campo
- * `order` aqui. Mover para a raia L na posicao k significa reinserir o item na
- * posicao global do k-esimo item de L, o que preserva a ordem relativa das
- * outras raias sem precisar reindexar nada.
- */
-export function moveItemToLane(
-  items: ChecklistItem[],
-  itemId: string,
-  lane: Lane,
-  toIndex: number,
-  now: string,
-): ChecklistItem[] | null {
-  const current = items.find((item) => item.id === itemId)
-  if (!current) return null
-
-  const rest = items.filter((item) => item.id !== itemId)
-  const laneItems = itemsInLane(rest, lane.id)
-  const index = Math.max(0, Math.min(toIndex, laneItems.length))
-
-  const moved: ChecklistItem = { ...current, laneId: lane.id, state: lane.kind, updatedAt: now }
-  // a raia manda no estado: entrar numa raia de espera reinicia o relogio
-  if (lane.kind === 'waiting') moved.waitingSince = current.state === 'waiting' ? current.waitingSince ?? now : now
-  else delete moved.waitingSince
-
-  const before = laneItems[index]
-  if (before) {
-    const at = rest.indexOf(before)
-    return [...rest.slice(0, at), moved, ...rest.slice(at)]
-  }
-  const last = laneItems[laneItems.length - 1]
-  if (last) {
-    const at = rest.indexOf(last) + 1
-    return [...rest.slice(0, at), moved, ...rest.slice(at)]
-  }
-  return [...rest, moved]
-}
-
-/** Raias padrao ao transformar um card em quadro. */
-export function defaultLanes(): { name: string; kind: ItemState }[] {
-  return [
-    { name: 'A fazer', kind: 'todo' },
-    { name: 'Aguardando', kind: 'waiting' },
-    { name: 'Feito', kind: 'done' },
-  ]
 }
 
 /* --- conversao de descricao em itens ------------------------------------- */
