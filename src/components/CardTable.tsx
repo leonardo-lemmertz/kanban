@@ -27,6 +27,7 @@ const DOT: Record<Situation, string> = {
   waiting: 'bg-amber-500',
   todo: 'bg-sky-500',
   untouched: 'bg-zinc-400 dark:bg-zinc-600',
+  discarded: 'bg-zinc-300 ring-1 ring-zinc-400 dark:bg-zinc-800 dark:ring-zinc-600',
 }
 
 const DUE_TEXT: Record<string, string> = {
@@ -187,7 +188,8 @@ export function CardTable(props: CardTableProps) {
               return (
                 <tr
                   key={row.line}
-                  className="group border-b border-zinc-200 align-middle hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/60"
+                  className={`group border-b border-zinc-200 align-middle hover:bg-zinc-50 dark:border-zinc-800
+                    dark:hover:bg-zinc-900/60 ${row.situation === 'discarded' ? 'opacity-50' : ''}`}
                 >
                   <td className="px-1 py-0.5">
                     <TextCell

@@ -102,10 +102,10 @@ A tabela é **editável**: clique em qualquer célula para mudar o nome ou o det
 | Coluna | De onde vem |
 | --- | --- |
 | Fornecedor | o que vem antes dos dois-pontos |
-| Situação | palavras no texto: "reunião" → reunião marcada; "aguardando", "em contato", "chamei", "retorno" → aguardando; nada depois dos dois-pontos → sem contato; o resto → a fazer |
+| Situação | palavras no texto: "reunião" → reunião marcada, **a não ser** que a reunião já tenha sido ("realizada", "aconteceu"); "não atende", "sem interesse", "não temos porte" → descartado; "aguardando", "em contato", "chamei", "retorno" → aguardando; nada depois dos dois-pontos → sem contato; o resto → a fazer |
 | Detalhe | o texto depois dos dois-pontos, sem alteração |
 | Contato | canais reconhecidos: WhatsApp, Instagram, site, telefone, e-mail, link |
-| Quando | `24/08` e `10h`, com cuidado para não confundir telefone (`0800 006 9500`) com data |
+| Quando | `24/08` e `10h`, com cuidado para não confundir telefone (`0800 006 9500`) com data. Em reunião já realizada a primeira data é a dela, então a coluna mostra a **próxima** data da linha — `Reunião realizada 24/08 14h, cobrar Paulo dia 25/08` vira 25/08 — e fica vazia quando não há outra |
 
 Escolher na lista uma situação **diferente** da que o texto sugere deixa uma marca visível no fim da linha — `Akropoli: Reunião 24/08 14h [aguardando]` —, porque a reunião já aconteceu e agora é só espera. Escolher a mesma que o texto sugere apaga a marca. Nada some da descrição sem aparecer nela.
 

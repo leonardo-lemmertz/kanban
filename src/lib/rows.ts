@@ -15,17 +15,18 @@
  * situacao, canal de contato e data.
  */
 
-export type Situation = 'meeting' | 'waiting' | 'todo' | 'untouched'
+export type Situation = 'meeting' | 'waiting' | 'todo' | 'untouched' | 'discarded'
 
 export const SITUATION_LABEL: Record<Situation, string> = {
   meeting: 'Reunião marcada',
   waiting: 'Aguardando',
   todo: 'A fazer',
   untouched: 'Sem contato',
+  discarded: 'Descartado',
 }
 
 /** Ordem em que as situacoes aparecem na lista e ao ordenar por essa coluna. */
-export const SITUATIONS: Situation[] = ['meeting', 'waiting', 'todo', 'untouched']
+export const SITUATIONS: Situation[] = ['meeting', 'waiting', 'todo', 'untouched', 'discarded']
 
 /**
  * Marcador escrito no fim da linha quando a situacao escolhida a mao difere da
@@ -40,6 +41,7 @@ const MARKER_WORD: Record<Situation, string> = {
   waiting: 'aguardando',
   todo: 'a fazer',
   untouched: 'sem contato',
+  discarded: 'descartado',
 }
 
 const MARKER_BY_WORD: Record<string, Situation> = {
@@ -48,9 +50,10 @@ const MARKER_BY_WORD: Record<string, Situation> = {
   aguardando: 'waiting',
   'a fazer': 'todo',
   'sem contato': 'untouched',
+  descartado: 'discarded',
 }
 
-const MARKER_RE = /\s*\[(reuni[aã]o|aguardando|a fazer|sem contato)\]\s*$/i
+const MARKER_RE = /\s*\[(reuni[aã]o|aguardando|a fazer|sem contato|descartado)\]\s*$/i
 
 export interface Row {
   /** posicao entre as linhas de assunto, para poder voltar a ordem do texto */
@@ -77,7 +80,10 @@ export interface ParsedRows {
 }
 
 const MEETING_RE = /reuni[aã]o|reuni[aã]/i
+/** "reuniao realizada 24/08" e o oposto de compromisso: ja passou */
+const DONE_RE = /realizad|realizei|realizamos|aconteceu|j[áa] tivemos|j[áa] conversamos/i
 const WAITING_RE = /aguard|em contato|chamei|chamar|retorno/i
+const DISCARD_RE = /descartad|sem interesse|n[ãa]o (?:nos )?atende|n[ãa]o atendem|n[ãa]o temos porte/i
 
 const CHANNELS: { re: RegExp; label: string }[] = [
   { re: /\bwpp\b|whats/i, label: 'WhatsApp' },
@@ -89,7 +95,7 @@ const CHANNELS: { re: RegExp; label: string }[] = [
 ]
 
 /** dia/mes com ano opcional; exige a barra para nao confundir com telefone */
-const DATE_RE = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/
+const DATE_RE = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g
 /** "10h", "10h30", "14 h" */
 const TIME_RE = /\b(\d{1,2})\s*h(?:\s*(\d{2}))?\b/i
 /** marcadores de lista no comeco da linha */
@@ -101,8 +107,10 @@ function pad(value: number): string {
 
 function guessSituation(detail: string): Situation {
   if (detail.trim() === '') return 'untouched'
-  // reuniao antes de aguardando: "Reunião 24/08" nao e espera, e compromisso
-  if (MEETING_RE.test(detail)) return 'meeting'
+  // reuniao antes de aguardando: "Reunião 24/08" nao e espera, e compromisso --
+  // mas "Reunião realizada 24/08" ja aconteceu, e o que sobra e a tarefa
+  if (MEETING_RE.test(detail) && !DONE_RE.test(detail)) return 'meeting'
+  if (DISCARD_RE.test(detail)) return 'discarded'
   if (WAITING_RE.test(detail)) return 'waiting'
   return 'todo'
 }
@@ -116,21 +124,32 @@ function contactOf(detail: string): string {
 function whenOf(detail: string, referenceYear: number): { date?: string; time?: string } {
   const out: { date?: string; time?: string } = {}
 
-  const date = DATE_RE.exec(detail)
-  if (date) {
-    const day = Number(date[1])
-    const month = Number(date[2])
-    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
-      const raw = date[3]
-      const year = raw === undefined ? referenceYear : raw.length === 2 ? 2000 + Number(raw) : Number(raw)
-      out.date = `${year}-${pad(month)}-${pad(day)}`
-    }
+  const found: { iso: string; end: number }[] = []
+  for (const match of detail.matchAll(DATE_RE)) {
+    const day = Number(match[1])
+    const month = Number(match[2])
+    if (day < 1 || day > 31 || month < 1 || month > 12) continue
+    const raw = match[3]
+    const year = raw === undefined ? referenceYear : raw.length === 2 ? 2000 + Number(raw) : Number(raw)
+    found.push({ iso: `${year}-${pad(month)}-${pad(day)}`, end: match.index + match[0].length })
   }
 
-  const time = TIME_RE.exec(detail)
-  if (time) {
-    const hour = Number(time[1])
-    const minute = time[2] === undefined ? 0 : Number(time[2])
+  /*
+   * "Reunião realizada 24/08 14h, cobrar Paulo dia 25/08": a primeira data e a
+   * da reuniao que ja passou. O que interessa na coluna Quando e o proximo
+   * compromisso -- 25/08 --, e quando nao ha nenhum a coluna fica vazia em vez
+   * de alarmar por uma reuniao que ja aconteceu.
+   */
+  const dates = DONE_RE.test(detail) ? found.slice(1) : found
+  const first = dates[0]
+  if (first === undefined) return out
+  out.date = first.iso
+
+  // a hora tem que estar colada na data escolhida, senao e a hora de outra data
+  const near = TIME_RE.exec(detail.slice(first.end, first.end + 12))
+  if (near) {
+    const hour = Number(near[1])
+    const minute = near[2] === undefined ? 0 : Number(near[2])
     if (hour <= 23 && minute <= 59) out.time = `${pad(hour)}:${pad(minute)}`
   }
 
