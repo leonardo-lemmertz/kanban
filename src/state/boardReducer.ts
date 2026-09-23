@@ -1,4 +1,4 @@
-import { SCHEMA_VERSION, type Board, type Card, type Column, type Priority } from '../types'
+import { QUADRANT_LABEL, SCHEMA_VERSION, type Board, type Card, type Column, type Priority, type Quadrant } from '../types'
 import { newId } from '../lib/ids'
 
 export interface NewCardInput {
@@ -16,6 +16,8 @@ export type Action =
   | { type: 'card/create'; input: NewCardInput; atTop?: boolean }
   | { type: 'card/update'; id: string; patch: CardPatch }
   | { type: 'card/move'; id: string; toColumnId: string; toIndex: number }
+  /** quadrante ausente = tira o card da matriz, de volta para "a classificar" */
+  | { type: 'card/quadrant'; id: string; quadrant?: Quadrant }
   | { type: 'card/archive'; id: string }
   | { type: 'card/restore'; id: string; toColumnId?: string }
   | { type: 'card/delete'; id: string; from: 'board' | 'archive' }
@@ -137,6 +139,22 @@ export function applyAction(board: Board, action: Action): ActionResult {
         message: sameColumn
           ? `chore: reordena "${quote(card.title)}" em ${columnTitle(board, action.toColumnId)}`
           : `chore: move "${quote(card.title)}" para ${columnTitle(board, action.toColumnId)}`,
+      }
+    }
+
+    case 'card/quadrant': {
+      const card = board.cards.find((c) => c.id === action.id)
+      if (!card) return noop(board)
+      if (card.quadrant === action.quadrant) return noop(board)
+      const next: Card = { ...card, updatedAt: now }
+      if (action.quadrant === undefined) delete next.quadrant
+      else next.quadrant = action.quadrant
+      return {
+        board: stamp({ ...board, cards: board.cards.map((c) => (c.id === action.id ? next : c)) }),
+        message:
+          action.quadrant === undefined
+            ? `chore: tira "${quote(card.title)}" da matriz`
+            : `chore: classifica "${quote(card.title)}" como ${QUADRANT_LABEL[action.quadrant]}`,
       }
     }
 

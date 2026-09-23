@@ -1,4 +1,4 @@
-import { SCHEMA_VERSION, type Board, type Card, type Column, type Priority } from '../types'
+import { SCHEMA_VERSION, type Board, type Card, type Column, type Priority, type Quadrant } from '../types'
 import { newId } from '../lib/ids'
 
 const PRIORITY_SET = new Set<Priority>(['baixa', 'media', 'alta', 'urgente'])
@@ -9,6 +9,11 @@ function asString(value: unknown, fallback = ''): string {
 
 function asPriority(value: unknown): Priority {
   return typeof value === 'string' && PRIORITY_SET.has(value as Priority) ? (value as Priority) : 'media'
+}
+
+/** v1 nao tinha quadrante; qualquer coisa fora de 1..4 vira "nao classificado". */
+function asQuadrant(value: unknown): Quadrant | undefined {
+  return value === 1 || value === 2 || value === 3 || value === 4 ? value : undefined
 }
 
 function asTags(value: unknown): string[] {
@@ -45,6 +50,7 @@ function asCard(raw: unknown, columnIds: Set<string>, fallbackColumn: string, in
     createdAt: asString(o.createdAt, now),
     updatedAt: asString(o.updatedAt, now),
     order: typeof o.order === 'number' ? o.order : (index + 1) * 100,
+    ...(asQuadrant(o.quadrant) !== undefined ? { quadrant: asQuadrant(o.quadrant) } : {}),
     ...(archivedAt !== '' ? { archivedAt } : {}),
   }
 }

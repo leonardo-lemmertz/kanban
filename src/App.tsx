@@ -5,6 +5,7 @@ import { migrate } from './storage'
 import { useHotkeys } from './hooks/useHotkeys'
 import { Toolbar, type View } from './components/Toolbar'
 import { Board } from './components/Board'
+import { MatrixView } from './components/MatrixView'
 import { TrackView } from './components/TrackView'
 import { CardPanel } from './components/CardPanel'
 import { CardTable } from './components/CardTable'
@@ -207,6 +208,15 @@ export function App() {
             dispatch={dispatch}
             onOpenCard={(card) => setPanel({ mode: 'edit', cardId: card.id })}
             onAddCard={(columnId) => openCreate(columnId)}
+          />
+        )}
+        {view === 'matrix' && (
+          <MatrixView
+            board={board}
+            hiddenIds={hiddenIds}
+            selectedCardId={openPanel?.mode === 'edit' ? openPanel.cardId : null}
+            dispatch={dispatch}
+            onOpenCard={(card) => setPanel({ mode: 'edit', cardId: card.id })}
           />
         )}
         {view === 'track' && (
