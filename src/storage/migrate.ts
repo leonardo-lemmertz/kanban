@@ -27,7 +27,12 @@ function asColumn(raw: unknown): Column | null {
   const title = asString(o.title).trim()
   if (title === '') return null
   const wip = typeof o.wipLimit === 'number' && o.wipLimit > 0 ? Math.floor(o.wipLimit) : undefined
-  return { id: asString(o.id) || newId('col'), title, ...(wip !== undefined ? { wipLimit: wip } : {}) }
+  return {
+    id: asString(o.id) || newId('col'),
+    title,
+    ...(wip !== undefined ? { wipLimit: wip } : {}),
+    ...(o.done === true ? { done: true } : {}),
+  }
 }
 
 function asCard(raw: unknown, columnIds: Set<string>, fallbackColumn: string, index: number): Card | null {

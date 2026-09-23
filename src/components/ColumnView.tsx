@@ -20,6 +20,7 @@ export interface ColumnViewProps {
   onAddCard: () => void
   onRename: (title: string) => void
   onSetWip: (limit?: number) => void
+  onToggleDone: (done: boolean) => void
   onDeleteColumn: () => void
   onArchiveAll: () => void
   onMoveColumn: (toIndex: number) => void
@@ -41,6 +42,7 @@ function ColumnMenu(props: {
   cardCount: number
   onRename: () => void
   onSetWip: (limit?: number) => void
+  onToggleDone: (done: boolean) => void
   onArchiveAll: () => void
   onDelete: () => void
   onMove: (toIndex: number) => void
@@ -99,6 +101,11 @@ function ColumnMenu(props: {
             {
               label: props.column.wipLimit ? `WIP limit (${props.column.wipLimit})` : 'Definir WIP limit',
               run: askWip,
+              disabled: false,
+            },
+            {
+              label: props.column.done ? 'Não é mais coluna de concluídos' : 'Marcar como coluna de concluídos',
+              run: () => props.onToggleDone(!props.column.done),
               disabled: false,
             },
             { label: 'Mover para a esquerda', run: () => props.onMove(props.index - 1), disabled: props.index === 0 },
@@ -260,6 +267,7 @@ export function ColumnView(props: ColumnViewProps) {
           cardCount={total}
           onRename={startRename}
           onSetWip={props.onSetWip}
+          onToggleDone={props.onToggleDone}
           onArchiveAll={props.onArchiveAll}
           onDelete={props.onDeleteColumn}
           onMove={props.onMoveColumn}

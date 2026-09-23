@@ -98,6 +98,7 @@ export function Board(props: BoardProps) {
           onAddCard={() => props.onAddCard(column.id)}
           onRename={(title) => dispatch({ type: 'column/rename', id: column.id, title })}
           onSetWip={(wipLimit) => dispatch({ type: 'column/wip', id: column.id, wipLimit })}
+          onToggleDone={(done) => dispatch({ type: 'column/done', id: column.id, done })}
           onDeleteColumn={() => deleteColumn(column.id)}
           onArchiveAll={() => {
             const count = byColumn.get(column.id)?.length ?? 0

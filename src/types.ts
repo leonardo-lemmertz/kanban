@@ -1,6 +1,6 @@
 /** Versao do schema gravado em disco. Incrementar ao mudar o formato e
  *  adicionar o passo correspondente em storage/migrate.ts. */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export type Priority = 'baixa' | 'media' | 'alta' | 'urgente'
 
@@ -42,6 +42,12 @@ export interface Column {
   id: string
   title: string
   wipLimit?: number
+  /**
+   * Coluna de trabalho terminado. Marcada a mao no menu da coluna, nao deduzida
+   * do titulo nem da posicao: os titulos sao livres e as colunas se reordenam.
+   * O que cai aqui sai da Matriz -- concluido nao se triem.
+   */
+  done?: boolean
 }
 
 export interface Card {

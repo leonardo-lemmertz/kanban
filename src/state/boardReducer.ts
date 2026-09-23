@@ -24,6 +24,7 @@ export type Action =
   | { type: 'column/create'; title: string }
   | { type: 'column/rename'; id: string; title: string }
   | { type: 'column/wip'; id: string; wipLimit?: number }
+  | { type: 'column/done'; id: string; done: boolean }
   | { type: 'column/move'; id: string; toIndex: number }
   | { type: 'column/delete'; id: string; moveCardsTo?: string }
   | { type: 'board/replace'; board: Board; reason: string }
@@ -247,6 +248,24 @@ export function applyAction(board: Board, action: Action): ActionResult {
           limit === undefined
             ? `chore: remove WIP limit de "${quote(column.title)}"`
             : `chore: define WIP limit ${limit} em "${quote(column.title)}"`,
+      }
+    }
+
+    case 'column/done': {
+      const column = board.columns.find((c) => c.id === action.id)
+      if (!column || (column.done ?? false) === action.done) return noop(board)
+      return {
+        board: stamp({
+          ...board,
+          columns: board.columns.map((c) => {
+            if (c.id !== action.id) return c
+            const { done: _drop, ...rest } = c
+            return action.done ? { ...rest, done: true } : rest
+          }),
+        }),
+        message: action.done
+          ? `chore: marca "${quote(column.title)}" como coluna de concluidos`
+          : `chore: "${quote(column.title)}" deixa de ser coluna de concluidos`,
       }
     }
 

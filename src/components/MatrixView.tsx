@@ -42,9 +42,27 @@ export function MatrixView(props: MatrixViewProps) {
   /** alvo sob o cursor: um quadrante, ou 'tray' para desclassificar */
   const [dropTarget, setDropTarget] = useState<Quadrant | 'tray' | null>(null)
 
-  const visible = useMemo(
-    () => board.cards.filter((c) => !props.hiddenIds.has(c.id)),
-    [board.cards, props.hiddenIds],
+  /**
+   * Cards em coluna de concluidos ficam fora da matriz: o que ja terminou nao
+   * se triem. Sao contados a parte para o total nao parecer errado em relacao
+   * ao numero na barra de cima.
+   */
+  const doneColumnIds = useMemo(
+    () => new Set(board.columns.filter((c) => c.done).map((c) => c.id)),
+    [board.columns],
+  )
+
+  const { visible, doneCount } = useMemo(() => {
+    const shown = board.cards.filter((c) => !props.hiddenIds.has(c.id))
+    return {
+      visible: shown.filter((c) => !doneColumnIds.has(c.columnId)),
+      doneCount: shown.filter((c) => doneColumnIds.has(c.columnId)).length,
+    }
+  }, [board.cards, props.hiddenIds, doneColumnIds])
+
+  const doneTitles = useMemo(
+    () => board.columns.filter((c) => c.done).map((c) => c.title).join(', '),
+    [board.columns],
   )
 
   const { unclassified, byQuadrant } = useMemo(() => {
@@ -189,7 +207,8 @@ export function MatrixView(props: MatrixViewProps) {
       if (cardId === null || cardId === '') return
       // Arrasto vindo do board (uma coluna) carrega um id de card que nao esta
       // nesta vista; ignorar em vez de criar um quadrante para um card oculto.
-      if (!board.cards.some((c) => c.id === cardId)) return
+      const dropped = board.cards.find((c) => c.id === cardId)
+      if (!dropped || doneColumnIds.has(dropped.columnId)) return
       place(cardId, target === 'tray' ? undefined : target)
     },
   })
@@ -234,6 +253,11 @@ export function MatrixView(props: MatrixViewProps) {
             A classificar
           </h2>
           <span className="text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">{unclassified.length}</span>
+          {doneCount > 0 && (
+            <span className="text-[11px] text-zinc-400 dark:text-zinc-500" title={`Coluna(s): ${doneTitles}`}>
+              · {doneCount} em {doneTitles} fora da matriz
+            </span>
+          )}
           {suggested.length > 0 && (
             <button type="button" className="btn ml-auto" onClick={applySuggestions}>
               {suggested.length === 1
