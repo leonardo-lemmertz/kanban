@@ -99,6 +99,15 @@ export function CardTile(props: CardTileProps) {
             </span>
           )}
 
+          {card.skill && (
+            <span
+              className="rounded-sm bg-sky-50 px-1 font-mono text-[10px] leading-4 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+              title="Skill do sistema ligada a este card"
+            >
+              /{card.skill}
+            </span>
+          )}
+
           {card.tags.map((tag) => (
             <span
               key={tag}

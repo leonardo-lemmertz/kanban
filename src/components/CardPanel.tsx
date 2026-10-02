@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { PRIORITIES, PRIORITY_LABEL, type Card, type Column, type Priority } from '../types'
+import { PRIORITIES, PRIORITY_LABEL, type Card, type Column, type Priority, type Skill } from '../types'
 import type { CardPatch, NewCardInput } from '../state/boardReducer'
 import { Markdown } from '../lib/markdown'
 import { looksLikeTable } from '../lib/rows'
@@ -11,6 +11,7 @@ export interface CardPanelProps {
   card: Card | null
   columnId: string
   columns: Column[]
+  skills: Skill[]
   onClose: () => void
   onCreate: (input: NewCardInput) => void
   onUpdate: (patch: CardPatch) => void
@@ -26,6 +27,7 @@ interface Draft {
   priority: Priority
   tags: string
   dueDate: string
+  skill: string
 }
 
 function toDraft(card: Card | null): Draft {
@@ -35,6 +37,7 @@ function toDraft(card: Card | null): Draft {
     priority: card?.priority ?? 'media',
     tags: card?.tags.join(', ') ?? '',
     dueDate: card?.dueDate ?? '',
+    skill: card?.skill ?? '',
   }
 }
 
@@ -87,6 +90,7 @@ export function CardPanel(props: CardPanelProps) {
         if (draft.dueDate !== (card.dueDate ?? '')) props.onUpdate({ dueDate: draft.dueDate })
         break
       case 'priority':
+      case 'skill':
         break
     }
   }
@@ -100,6 +104,7 @@ export function CardPanel(props: CardPanelProps) {
       priority: draft.priority,
       tags: parseTags(draft.tags),
       ...(draft.dueDate !== '' ? { dueDate: draft.dueDate } : {}),
+      ...(draft.skill !== '' ? { skill: draft.skill } : {}),
     })
   }
 
@@ -182,6 +187,42 @@ export function CardPanel(props: CardPanelProps) {
             />
           </div>
         </div>
+
+        {(props.skills.length > 0 || draft.skill !== '') && (
+          <div>
+            <label className="label" htmlFor="card-skill">
+              Skill
+            </label>
+            <select
+              id="card-skill"
+              value={draft.skill}
+              onChange={(event) => {
+                const skill = event.target.value
+                patch('skill', skill)
+                if (mode === 'edit' && card && skill !== (card.skill ?? '')) props.onUpdate({ skill })
+              }}
+              className="field"
+            >
+              <option value="">— nenhuma —</option>
+              {/* skill que saiu do catalogo continua visivel ate o card ser religado */}
+              {draft.skill !== '' && !props.skills.some((s) => s.id === draft.skill) && (
+                <option value={draft.skill}>/{draft.skill} (fora do catálogo)</option>
+              )}
+              {[...new Set(props.skills.map((s) => s.group))].map((group) => (
+                <optgroup key={group} label={group}>
+                  {props.skills
+                    .filter((s) => s.group === group)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        /{s.id}
+                        {s.company ? ` · ${s.company}` : ''}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="label" htmlFor="card-tags">

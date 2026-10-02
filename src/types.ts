@@ -1,6 +1,6 @@
 /** Versao do schema gravado em disco. Incrementar ao mudar o formato e
  *  adicionar o passo correspondente em storage/migrate.ts. */
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 export type Priority = 'baixa' | 'media' | 'alta' | 'urgente'
 
@@ -63,8 +63,28 @@ export interface Card {
   order: number
   /** quadrante da matriz de Eisenhower; ausente = ainda nao classificado */
   quadrant?: Quadrant
+  /** id da skill do sistema ligada a este card (Board.skills); ausente = nenhuma */
+  skill?: string
   /** preenchido apenas em Board.archived */
   archivedAt?: string
+}
+
+/**
+ * Skill do sistema de trabalho (o OS no Claude Code). O catalogo mora no
+ * board.json, nao no codigo: este repositorio e publico e as descricoes falam de
+ * empresas e caminhos internos. Quem mantem a lista e o proprio sistema, editando
+ * o board.json; o app so le e liga cards a ela.
+ */
+export interface Skill {
+  /** o nome do comando, sem a barra: "conciliacao-credeal" */
+  id: string
+  /** agrupamento na aba Skills: "Conciliação", "Fluxo de caixa"... */
+  group: string
+  /** empresa a que a skill se refere; ausente = vale para todas (metodo) */
+  company?: string
+  summary: string
+  /** exemplo de como pedir */
+  example?: string
 }
 
 export interface Board {
@@ -72,5 +92,7 @@ export interface Board {
   columns: Column[]
   cards: Card[]
   archived: Card[]
+  /** v4: catalogo de skills; vazio em boards antigos */
+  skills: Skill[]
   updatedAt: string
 }

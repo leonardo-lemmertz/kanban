@@ -8,9 +8,11 @@ export interface NewCardInput {
   priority?: Priority
   tags?: string[]
   dueDate?: string
+  skill?: string
 }
 
-export type CardPatch = Partial<Pick<Card, 'title' | 'description' | 'priority' | 'tags' | 'dueDate'>>
+/** skill vazia ('') = desliga o card da skill */
+export type CardPatch = Partial<Pick<Card, 'title' | 'description' | 'priority' | 'tags' | 'dueDate' | 'skill'>>
 
 export type Action =
   | { type: 'card/create'; input: NewCardInput; atTop?: boolean }
@@ -86,6 +88,7 @@ export function applyAction(board: Board, action: Action): ActionResult {
         priority: action.input.priority ?? 'media',
         tags: action.input.tags ?? [],
         ...(action.input.dueDate ? { dueDate: action.input.dueDate } : {}),
+        ...(action.input.skill ? { skill: action.input.skill } : {}),
         createdAt: now,
         updatedAt: now,
         order: action.atTop
@@ -104,6 +107,7 @@ export function applyAction(board: Board, action: Action): ActionResult {
       const patch = action.patch
       const next: Card = { ...current, ...patch, updatedAt: now }
       if ('dueDate' in patch && !patch.dueDate) delete next.dueDate
+      if ('skill' in patch && !patch.skill) delete next.skill
       if (next.title.trim() === '') return noop(board)
       next.title = next.title.trim()
       const fields = Object.keys(patch).filter((k) => k !== 'title')

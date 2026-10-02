@@ -3,7 +3,7 @@ import { PRIORITIES, PRIORITY_LABEL, type Priority } from '../types'
 import type { SyncStatus } from '../state/useBoard'
 import { SyncBadge } from './SyncBadge'
 
-export type View = 'board' | 'matrix' | 'track' | 'archive' | 'settings'
+export type View = 'board' | 'matrix' | 'track' | 'skills' | 'archive' | 'settings'
 
 export interface ToolbarProps {
   view: View
@@ -40,6 +40,7 @@ export function Toolbar(props: ToolbarProps) {
             ['board', 'Board'],
             ['matrix', 'Matriz'],
             ['track', 'Pista'],
+            ['skills', 'Skills'],
             ['archive', `Arquivo${props.archivedCount > 0 ? ` (${props.archivedCount})` : ''}`],
             ['settings', 'Config'],
           ] as const
@@ -60,7 +61,7 @@ export function Toolbar(props: ToolbarProps) {
         ))}
       </div>
 
-      <div className="relative min-w-0 flex-1 sm:max-w-xs">
+      <div className="relative min-w-[8rem] flex-1 sm:max-w-xs">
         <input
           ref={props.searchRef}
           value={props.query}

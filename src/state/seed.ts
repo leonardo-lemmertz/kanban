@@ -74,6 +74,7 @@ export function createSeedBoard(): Board {
       },
     ],
     archived: [],
+    skills: [],
     updatedAt: now,
   }
 }

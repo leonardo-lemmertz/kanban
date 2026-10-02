@@ -10,6 +10,7 @@ import { TrackView } from './components/TrackView'
 import { CardPanel } from './components/CardPanel'
 import { CardTable } from './components/CardTable'
 import { ArchiveView } from './components/ArchiveView'
+import { SkillsView } from './components/SkillsView'
 import { SettingsView } from './components/SettingsView'
 import { ConflictBanner, ErrorBanner, FileMissingBanner, PermissionBanner } from './components/Banners'
 
@@ -227,6 +228,9 @@ export function App() {
             onOpenCard={(card) => setPanel({ mode: 'edit', cardId: card.id })}
           />
         )}
+        {view === 'skills' && (
+          <SkillsView board={board} onOpenCard={(card) => setPanel({ mode: 'edit', cardId: card.id })} />
+        )}
         {view === 'archive' && <ArchiveView board={board} dispatch={dispatch} />}
         {view === 'settings' && (
           <SettingsView config={api.config} onSave={api.saveConfig} onExport={() => downloadJson(board)} />
@@ -241,6 +245,7 @@ export function App() {
           card={editing}
           columnId={openPanel.mode === 'create' ? openPanel.columnId : (editing?.columnId ?? board.columns[0].id)}
           columns={board.columns}
+          skills={board.skills}
           onClose={() => setPanel(null)}
           onCreate={(input) => {
             dispatch({ type: 'card/create', input })

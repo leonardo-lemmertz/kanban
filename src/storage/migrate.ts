@@ -1,4 +1,4 @@
-import { SCHEMA_VERSION, type Board, type Card, type Column, type Priority, type Quadrant } from '../types'
+import { SCHEMA_VERSION, type Board, type Card, type Column, type Priority, type Quadrant, type Skill } from '../types'
 import { newId } from '../lib/ids'
 
 const PRIORITY_SET = new Set<Priority>(['baixa', 'media', 'alta', 'urgente'])
@@ -44,6 +44,7 @@ function asCard(raw: unknown, columnIds: Set<string>, fallbackColumn: string, in
   const columnId = asString(o.columnId)
   const dueDate = asString(o.dueDate).trim()
   const archivedAt = asString(o.archivedAt).trim()
+  const skill = asString(o.skill).trim()
   return {
     id: asString(o.id) || newId('card'),
     columnId: columnIds.has(columnId) ? columnId : fallbackColumn,
@@ -56,7 +57,26 @@ function asCard(raw: unknown, columnIds: Set<string>, fallbackColumn: string, in
     updatedAt: asString(o.updatedAt, now),
     order: typeof o.order === 'number' ? o.order : (index + 1) * 100,
     ...(asQuadrant(o.quadrant) !== undefined ? { quadrant: asQuadrant(o.quadrant) } : {}),
+    ...(skill !== '' ? { skill } : {}),
     ...(archivedAt !== '' ? { archivedAt } : {}),
+  }
+}
+
+/** v3 nao tinha skills; entrada sem id ou sem resumo e descartada. */
+function asSkill(raw: unknown): Skill | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const o = raw as Record<string, unknown>
+  const id = asString(o.id).trim().replace(/^\//, '')
+  const summary = asString(o.summary).trim()
+  if (id === '' || summary === '') return null
+  const company = asString(o.company).trim()
+  const example = asString(o.example).trim()
+  return {
+    id,
+    group: asString(o.group).trim() || 'Outras',
+    ...(company !== '' ? { company } : {}),
+    summary,
+    ...(example !== '' ? { example } : {}),
   }
 }
 
@@ -92,11 +112,21 @@ export function migrate(raw: unknown): Board {
         .map((card) => ({ ...card, archivedAt: card.archivedAt ?? card.updatedAt ?? now }))
     : []
 
+  // id repetido: fica a primeira ocorrencia
+  const skillsById = new Map<string, Skill>()
+  if (Array.isArray(o.skills)) {
+    for (const skill of o.skills.map(asSkill)) {
+      if (skill && !skillsById.has(skill.id)) skillsById.set(skill.id, skill)
+    }
+  }
+  const skills = [...skillsById.values()]
+
   return {
     version: SCHEMA_VERSION,
     columns,
     cards,
     archived,
+    skills,
     updatedAt: asString(o.updatedAt, now),
   }
 }
