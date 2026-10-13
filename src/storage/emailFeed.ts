@@ -9,13 +9,16 @@ import type { GithubConfig } from './config'
  * email (virar card, tratado) fica no proprio board, em `emailsHandled`.
  */
 
-export type EmailKind = 'acao' | 'pendente' | 'info'
+/** aguardando = email que o Leonardo enviou pedindo algo e ninguem respondeu */
+export type EmailKind = 'acao' | 'pendente' | 'aguardando' | 'info'
 
 export interface EmailItem {
   /** id estavel do email (internetMessageId ou id do Outlook) */
   id: string
   kind: EmailKind
   from: string
+  /** so em aguardando: para quem foi o pedido */
+  to?: string
   subject: string
   /** o que pedem, em uma ou duas frases */
   ask: string
@@ -23,7 +26,7 @@ export interface EmailItem {
   due?: string
   company?: string
   suggestion?: string
-  /** ISO */
+  /** ISO; em aguardando, quando o Leonardo enviou */
   receivedAt?: string
   /** link para abrir o email no Outlook */
   link?: string
@@ -41,7 +44,7 @@ export interface EmailFeed {
   recado?: string
 }
 
-const KINDS = new Set<EmailKind>(['acao', 'pendente', 'info'])
+const KINDS = new Set<EmailKind>(['acao', 'pendente', 'aguardando', 'info'])
 
 function str(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -63,6 +66,7 @@ function asItem(raw: unknown): EmailItem | null {
     subject,
     ask: str(o.ask),
     ...(/^\d{4}-\d{2}-\d{2}$/.test(due) ? { due } : {}),
+    ...optional('to'),
     ...optional('company'),
     ...optional('suggestion'),
     ...optional('receivedAt'),

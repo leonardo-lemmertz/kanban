@@ -196,7 +196,7 @@ export function App() {
         archivedCount={board.archived.length}
         emailOpen={
           emailFeed
-            ? emailFeed.items.filter((i) => i.kind !== 'info' && !board.emailsHandled[i.id]).length
+            ? emailFeed.items.filter((i) => (i.kind === 'acao' || i.kind === 'pendente') && !board.emailsHandled[i.id]).length
             : null
         }
       />

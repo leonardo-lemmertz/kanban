@@ -18,6 +18,7 @@ export interface EmailViewProps {
 const SECTION: Record<EmailKind, string> = {
   acao: 'Pede ação sua',
   pendente: 'Ainda sem resposta (de triagens anteriores)',
+  aguardando: 'Aguardando resposta de outros',
   info: 'Informativo',
 }
 
@@ -37,14 +38,45 @@ function daysUntil(iso: string): number {
   return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(ty, tm - 1, td)) / 86_400_000)
 }
 
+/**
+ * Dias uteis que ja passaram desde o envio (sabado e domingo nao contam).
+ * Enviado na segunda: terca = 1, quarta = 2. Enviado na sexta: segunda = 1.
+ */
+export function businessDaysSince(iso: string): number {
+  const sent = new Date(iso)
+  const day = new Date(sent.getFullYear(), sent.getMonth(), sent.getDate())
+  const today = new Date()
+  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  let count = 0
+  while (day < end) {
+    day.setDate(day.getDate() + 1)
+    const wd = day.getDay()
+    if (wd !== 0 && wd !== 6) count++
+  }
+  return count
+}
+
+/** Combinado com o Leonardo: 1 dia util sem resposta = atencao; 2 ou mais = cobrar. */
+function waitLevel(email: EmailItem): 'ok' | 'atencao' | 'cobrar' {
+  if (email.kind !== 'aguardando' || !email.receivedAt) return 'ok'
+  const days = businessDaysSince(email.receivedAt)
+  return days >= 2 ? 'cobrar' : days === 1 ? 'atencao' : 'ok'
+}
+
+function who(name: string): string {
+  return name.split(/[(<]/)[0].trim()
+}
+
 function toCardInput(email: EmailItem, columnId: string): NewCardInput {
-  const priority: Priority = email.due && daysUntil(email.due) <= 3 ? 'alta' : 'media'
+  const waiting = email.kind === 'aguardando'
+  const priority: Priority =
+    (email.due && daysUntil(email.due) <= 3) || (waiting && waitLevel(email) === 'cobrar') ? 'alta' : 'media'
   const lines = [
     email.ask || email.subject,
     '',
-    `- De: ${email.from}`,
+    ...(waiting ? [`- Para: ${email.to ?? email.from}`] : [`- De: ${email.from}`]),
     `- Assunto: ${email.subject}`,
-    ...(email.receivedAt ? [`- Recebido: ${formatDateTime(email.receivedAt)}`] : []),
+    ...(email.receivedAt ? [`- ${waiting ? 'Enviado' : 'Recebido'}: ${formatDateTime(email.receivedAt)}`] : []),
     ...(email.due ? [`- Prazo: ${formatDue(email.due)}`] : []),
     ...(email.link ? [`- [Abrir no Outlook](${email.link})`] : []),
     '',
@@ -52,7 +84,7 @@ function toCardInput(email: EmailItem, columnId: string): NewCardInput {
   ]
   // tira os prefixos de resposta/encaminhamento do assunto (podem vir encadeados: "RES: ENC: ...")
   const subject = email.subject.replace(/^((RES|ENC|RE|FW|FWD|TR)\s*:\s*)+/i, '')
-  const title = `${email.from.split(/[(<]/)[0].trim()}: ${subject}`
+  const title = waiting ? `Cobrar ${who(email.to ?? email.from)}: ${subject}` : `${who(email.from)}: ${subject}`
   return {
     columnId,
     title: title.length > 120 ? `${title.slice(0, 117)}...` : title,
@@ -69,7 +101,7 @@ export function EmailView({ board, feed, problem, loading, onReload, dispatch, o
   const [columnPick, setColumnPick] = useState<Record<string, string>>({})
 
   const groups = useMemo(() => {
-    const result: Record<EmailKind, EmailItem[]> = { acao: [], pendente: [], info: [] }
+    const result: Record<EmailKind, EmailItem[]> = { acao: [], pendente: [], aguardando: [], info: [] }
     for (const item of feed?.items ?? []) {
       if (!showHandled && board.emailsHandled[item.id]) continue
       result[item.kind].push(item)
@@ -77,7 +109,10 @@ export function EmailView({ board, feed, problem, loading, onReload, dispatch, o
     return result
   }, [feed, board.emailsHandled, showHandled])
 
-  const open = (feed?.items ?? []).filter((i) => i.kind !== 'info' && !board.emailsHandled[i.id]).length
+  // o numero da aba conta so o que pede acao do Leonardo; aguardando fica na secao dela
+  const open = (feed?.items ?? []).filter(
+    (i) => (i.kind === 'acao' || i.kind === 'pendente') && !board.emailsHandled[i.id],
+  ).length
 
   const header = (
     <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -121,6 +156,7 @@ export function EmailView({ board, feed, problem, loading, onReload, dispatch, o
     const handled = board.emailsHandled[email.id]
     const columnId = columnPick[email.id] ?? columnFor(board, email.company)
     const due = email.due ? daysUntil(email.due) : null
+    const level = waitLevel(email)
     return (
       <li
         key={email.id}
@@ -130,7 +166,26 @@ export function EmailView({ board, feed, problem, loading, onReload, dispatch, o
         ].join(' ')}
       >
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="text-[12px] font-semibold">{email.from}</span>
+          <span className="text-[12px] font-semibold">
+            {email.kind === 'aguardando' ? `para ${email.to ?? email.from}` : email.from}
+          </span>
+          {email.kind === 'aguardando' && email.receivedAt && (
+            <span
+              className={`rounded-sm border px-1 text-[10px] font-semibold leading-4 tabular-nums ${
+                level === 'cobrar'
+                  ? 'border-red-400 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300'
+                  : level === 'atencao'
+                    ? 'border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+                    : 'border-zinc-300 text-zinc-500 dark:border-zinc-700'
+              }`}
+            >
+              {level === 'cobrar' ? 'cobrar · ' : level === 'atencao' ? 'atenção · ' : ''}
+              {(() => {
+                const days = businessDaysSince(email.receivedAt)
+                return days === 0 ? 'enviado hoje' : days === 1 ? '1 dia útil sem resposta' : `${days} dias úteis sem resposta`
+              })()}
+            </span>
+          )}
           {email.company && email.company !== '—' && (
             <span className="rounded-sm bg-sky-50 px-1 text-[10px] leading-4 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300">
               {email.company}
@@ -207,7 +262,7 @@ export function EmailView({ board, feed, problem, loading, onReload, dispatch, o
                 className="btn"
                 onClick={() => dispatch({ type: 'email/handle', emailId: email.id, subject: email.subject })}
               >
-                Tratado
+                {email.kind === 'aguardando' ? 'Resolvido' : 'Tratado'}
               </button>
               {email.link && (
                 <a href={email.link} target="_blank" rel="noreferrer" className="text-[11px] text-sky-700 hover:underline dark:text-sky-400">
@@ -225,7 +280,7 @@ export function EmailView({ board, feed, problem, loading, onReload, dispatch, o
     <div className="mx-auto h-full max-w-4xl overflow-y-auto p-3">
       {header}
       <div className="space-y-4">
-        {(['acao', 'pendente'] as const).map((kind) => (
+        {(['acao', 'pendente', 'aguardando'] as const).map((kind) => (
           <section key={kind}>
             <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
               {SECTION[kind]} ({groups[kind].length})
