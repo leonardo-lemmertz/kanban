@@ -1,6 +1,6 @@
 /** Versao do schema gravado em disco. Incrementar ao mudar o formato e
  *  adicionar o passo correspondente em storage/migrate.ts. */
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 export type Priority = 'baixa' | 'media' | 'alta' | 'urgente'
 
@@ -87,6 +87,15 @@ export interface Skill {
   example?: string
 }
 
+/** O que o usuario fez com um email da triagem (aba Email). */
+export interface EmailHandled {
+  /** ISO */
+  at: string
+  action: 'card' | 'tratado'
+  /** card criado a partir do email */
+  cardId?: string
+}
+
 export interface Board {
   version: number
   columns: Column[]
@@ -94,5 +103,7 @@ export interface Board {
   archived: Card[]
   /** v4: catalogo de skills; vazio em boards antigos */
   skills: Skill[]
+  /** v5: emails da triagem ja tratados, por id do email */
+  emailsHandled: Record<string, EmailHandled>
   updatedAt: string
 }

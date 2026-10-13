@@ -3,7 +3,7 @@ import { PRIORITIES, PRIORITY_LABEL, type Priority } from '../types'
 import type { SyncStatus } from '../state/useBoard'
 import { SyncBadge } from './SyncBadge'
 
-export type View = 'board' | 'matrix' | 'track' | 'skills' | 'archive' | 'settings'
+export type View = 'board' | 'matrix' | 'track' | 'skills' | 'email' | 'archive' | 'settings'
 
 export interface ToolbarProps {
   view: View
@@ -24,6 +24,8 @@ export interface ToolbarProps {
   visible: number
   total: number
   archivedCount: number
+  /** emails da triagem ainda em aberto; null = aba indisponivel (sem modo GitHub) */
+  emailOpen: number | null
 }
 
 export function Toolbar(props: ToolbarProps) {
@@ -41,6 +43,7 @@ export function Toolbar(props: ToolbarProps) {
             ['matrix', 'Matriz'],
             ['track', 'Pista'],
             ['skills', 'Skills'],
+            ['email', `Email${props.emailOpen ? ` (${props.emailOpen})` : ''}`],
             ['archive', `Arquivo${props.archivedCount > 0 ? ` (${props.archivedCount})` : ''}`],
             ['settings', 'Config'],
           ] as const

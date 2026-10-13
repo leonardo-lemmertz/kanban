@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Board as BoardModel, Priority } from './types'
 import { useBoard } from './state/useBoard'
 import { migrate } from './storage'
@@ -11,6 +11,9 @@ import { CardPanel } from './components/CardPanel'
 import { CardTable } from './components/CardTable'
 import { ArchiveView } from './components/ArchiveView'
 import { SkillsView } from './components/SkillsView'
+import { EmailView } from './components/EmailView'
+import { loadEmailFeed, parseEmailFeed, type EmailFeed } from './storage/emailFeed'
+import { isGithubConfigured } from './storage/config'
 import { SettingsView } from './components/SettingsView'
 import { ConflictBanner, ErrorBanner, FileMissingBanner, PermissionBanner } from './components/Banners'
 
@@ -42,6 +45,41 @@ export function App() {
   const [tableCardId, setTableCardId] = useState<string | null>(null)
   const [dismissedError, setDismissedError] = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+
+  // Triagem do email (emails.json ao lado do board.json); so existe no modo GitHub.
+  const [emailFeed, setEmailFeed] = useState<EmailFeed | null>(null)
+  const [emailProblem, setEmailProblem] = useState<string | null>(null)
+  const [emailLoading, setEmailLoading] = useState(false)
+  const githubOn = api.config.mode === 'github' && isGithubConfigured(api.config)
+  const reloadEmails = useCallback(async () => {
+    // so no `npm run dev`: triagem de exemplo gravada no localStorage, para testar sem token
+    const mock = import.meta.env.DEV ? localStorage.getItem('kanban.emailFeedMock') : null
+    if (mock) {
+      setEmailFeed(parseEmailFeed(JSON.parse(mock)))
+      setEmailProblem(null)
+      return
+    }
+    if (!githubOn) {
+      setEmailFeed(null)
+      setEmailProblem('A aba Email só funciona com o board salvo no GitHub (Config → GitHub).')
+      return
+    }
+    setEmailLoading(true)
+    try {
+      setEmailFeed(await loadEmailFeed(api.config))
+      setEmailProblem(null)
+    } catch (cause) {
+      setEmailProblem(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setEmailLoading(false)
+    }
+  }, [githubOn, api.config])
+  useEffect(() => {
+    void reloadEmails()
+  }, [reloadEmails])
+  useEffect(() => {
+    if (view === 'email') void reloadEmails()
+  }, [view, reloadEmails])
 
   const tags = useMemo(() => {
     if (!board) return []
@@ -156,6 +194,11 @@ export function App() {
         visible={visible}
         total={board.cards.length}
         archivedCount={board.archived.length}
+        emailOpen={
+          emailFeed
+            ? emailFeed.items.filter((i) => i.kind !== 'info' && !board.emailsHandled[i.id]).length
+            : null
+        }
       />
 
       {api.status === 'permission' && (
@@ -226,6 +269,17 @@ export function App() {
             hiddenIds={hiddenIds}
             selectedCardId={openPanel?.mode === 'edit' ? openPanel.cardId : null}
             onOpenCard={(card) => setPanel({ mode: 'edit', cardId: card.id })}
+          />
+        )}
+        {view === 'email' && (
+          <EmailView
+            board={board}
+            feed={emailFeed}
+            problem={emailProblem}
+            loading={emailLoading}
+            onReload={() => void reloadEmails()}
+            dispatch={dispatch}
+            onOpenCard={(cardId) => setPanel({ mode: 'edit', cardId })}
           />
         )}
         {view === 'skills' && (

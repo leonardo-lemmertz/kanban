@@ -30,6 +30,10 @@ export type Action =
   | { type: 'column/move'; id: string; toIndex: number }
   | { type: 'column/delete'; id: string; moveCardsTo?: string }
   | { type: 'board/replace'; board: Board; reason: string }
+  /** cria um card a partir de um email da triagem e marca o email como tratado */
+  | { type: 'email/toCard'; emailId: string; input: NewCardInput }
+  | { type: 'email/handle'; emailId: string; subject: string }
+  | { type: 'email/unhandle'; emailId: string; subject: string }
   | { type: 'board/archiveColumn'; columnId: string }
 
 export interface ActionResult {
@@ -75,6 +79,36 @@ export function applyAction(board: Board, action: Action): ActionResult {
   const now = new Date().toISOString()
 
   switch (action.type) {
+    case 'email/toCard': {
+      const created = applyAction(board, { type: 'card/create', input: action.input, atTop: true })
+      if (created.message === '') return noop(board)
+      const card = created.board.cards[created.board.cards.length - 1]
+      return {
+        board: stamp({
+          ...created.board,
+          emailsHandled: { ...created.board.emailsHandled, [action.emailId]: { at: now, action: 'card', cardId: card.id } },
+        }),
+        message: `${created.message} (email)`,
+      }
+    }
+
+    case 'email/handle': {
+      if (board.emailsHandled[action.emailId]) return noop(board)
+      return {
+        board: stamp({ ...board, emailsHandled: { ...board.emailsHandled, [action.emailId]: { at: now, action: 'tratado' } } }),
+        message: `chore: marca email "${quote(action.subject)}" como tratado`,
+      }
+    }
+
+    case 'email/unhandle': {
+      if (!board.emailsHandled[action.emailId]) return noop(board)
+      const { [action.emailId]: _removed, ...rest } = board.emailsHandled
+      return {
+        board: stamp({ ...board, emailsHandled: rest }),
+        message: `chore: volta email "${quote(action.subject)}" para a lista`,
+      }
+    }
+
     case 'card/create': {
       const { columnId, title } = action.input
       const clean = title.trim()

@@ -1,4 +1,4 @@
-import { SCHEMA_VERSION, type Board, type Card, type Column, type Priority, type Quadrant, type Skill } from '../types'
+import { SCHEMA_VERSION, type Board, type Card, type Column, type Priority, type Quadrant, type Skill, type EmailHandled } from '../types'
 import { newId } from '../lib/ids'
 
 const PRIORITY_SET = new Set<Priority>(['baixa', 'media', 'alta', 'urgente'])
@@ -121,12 +121,31 @@ export function migrate(raw: unknown): Board {
   }
   const skills = [...skillsById.values()]
 
+  // v5: emails tratados na aba Email; guarda so os 500 mais recentes
+  const handled: Record<string, EmailHandled> = {}
+  if (typeof o.emailsHandled === 'object' && o.emailsHandled !== null && !Array.isArray(o.emailsHandled)) {
+    const entries = Object.entries(o.emailsHandled as Record<string, unknown>)
+      .map(([id, raw]): [string, EmailHandled] | null => {
+        if (typeof raw !== 'object' || raw === null) return null
+        const h = raw as Record<string, unknown>
+        const action = h.action === 'card' || h.action === 'tratado' ? h.action : null
+        if (id.trim() === '' || action === null) return null
+        const cardId = asString(h.cardId).trim()
+        return [id, { at: asString(h.at, now), action, ...(cardId !== '' ? { cardId } : {}) }]
+      })
+      .filter((e): e is [string, EmailHandled] => e !== null)
+      .sort((a, b) => b[1].at.localeCompare(a[1].at))
+      .slice(0, 500)
+    for (const [id, h] of entries) handled[id] = h
+  }
+
   return {
     version: SCHEMA_VERSION,
     columns,
     cards,
     archived,
     skills,
+    emailsHandled: handled,
     updatedAt: asString(o.updatedAt, now),
   }
 }

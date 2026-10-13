@@ -75,6 +75,7 @@ export function createSeedBoard(): Board {
     ],
     archived: [],
     skills: [],
+    emailsHandled: {},
     updatedAt: now,
   }
 }
